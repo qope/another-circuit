@@ -2,6 +2,8 @@ use std::ops::Div;
 
 use halo2_proofs::circuit::{AssignedCell, Value};
 use halo2_proofs::halo2curves::bn256::Fr;
+use halo2curves::FieldExt;
+use halo2wrong_maingate::fe_to_big;
 use num_bigint::BigUint;
 use plonky2::field::extension::FieldExtension;
 use plonky2::field::{
@@ -44,14 +46,14 @@ pub fn gfe_to_fr(x: <GoldilocksField as Extendable<2>>::Extension) -> [Fr; 2] {
     ]
 }
 
-pub fn gfe_value_to_fr_value(
+pub fn gfe_value_to_fr_value<F: FieldExt>(
     x: Value<<GoldilocksField as Extendable<2>>::Extension>,
-) -> [Value<Fr>; 2] {
+) -> [Value<F>; 2] {
     let fr_vec = x
         .map(|x| {
             vec![
-                Fr::from(x.0[0].to_canonical_u64()),
-                Fr::from(x.0[1].to_canonical_u64()),
+                F::from(x.0[0].to_canonical_u64()),
+                F::from(x.0[1].to_canonical_u64()),
             ]
         })
         .transpose_vec(2);
@@ -62,8 +64,8 @@ pub fn gfe_to_u64(x: <GoldilocksField as Extendable<2>>::Extension) -> [u64; 2] 
     [x.0[0].to_canonical_u64(), x.0[1].to_canonical_u64()]
 }
 
-pub fn fr_to_gf(x: Fr) -> GoldilocksField {
-    let x = BigUint::from_bytes_le(&x.to_bytes());
+pub fn fr_to_gf<F: FieldExt>(x: F) -> GoldilocksField {
+    let x = fe_to_big(x);
     let r = x % GOLDILOCKS_MODULUS;
     GoldilocksField::from_canonical_u64(r.to_u64_digits()[0])
 }
@@ -75,8 +77,8 @@ pub fn fr2_to_gfe(x: [Fr; 2]) -> <GoldilocksField as Extendable<2>>::Extension {
     ])
 }
 
-pub fn assigned_ext_to_gfe(
-    x: [AssignedCell<Fr, Fr>; 2],
+pub fn assigned_ext_to_gfe<F: FieldExt>(
+    x: [AssignedCell<F, F>; 2],
 ) -> Value<<GoldilocksField as Extendable<2>>::Extension> {
     let x = x.map(|x| x.value().map(|x| fr_to_gf(*x)));
     x[0].zip(x[1]).map(|(x0, x1)| {
@@ -84,10 +86,10 @@ pub fn assigned_ext_to_gfe(
     })
 }
 
-pub fn assigned_ext_div(
-    x: [AssignedCell<Fr, Fr>; 2],
-    y: [AssignedCell<Fr, Fr>; 2],
-) -> [Value<Fr>; 2] {
+pub fn assigned_ext_div<F: FieldExt>(
+    x: [AssignedCell<F, F>; 2],
+    y: [AssignedCell<F, F>; 2],
+) -> [Value<F>; 2] {
     let x_gfe = assigned_ext_to_gfe(x);
     let y_gfe = assigned_ext_to_gfe(y);
     let output_gfe = x_gfe.zip(y_gfe).map(|(x, y)| x.div(y));
