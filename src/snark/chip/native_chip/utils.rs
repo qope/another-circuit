@@ -67,6 +67,9 @@ pub fn gfe_to_u64(x: <GoldilocksField as Extendable<2>>::Extension) -> [u64; 2] 
 pub fn fr_to_gf<F: FieldExt>(x: F) -> GoldilocksField {
     let x = fe_to_big(x);
     let r = x % GOLDILOCKS_MODULUS;
+    if r.to_u64_digits().len() == 0 {
+        return GoldilocksField(0);
+    }
     GoldilocksField::from_canonical_u64(r.to_u64_digits()[0])
 }
 

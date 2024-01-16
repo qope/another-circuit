@@ -249,9 +249,8 @@ impl<F: FieldExt> FriVerifierChip<F> {
 
         // `x_index` is the index of point selected from initial domain
         let mut x_index_bits = goldilocks_chip
-            .to_bits(ctx, x_index, F::NUM_BITS as usize)?
+            .to_bits(ctx, x_index, lde_bits)?
             .iter()
-            .take(lde_bits)
             .cloned()
             .collect_vec();
 
