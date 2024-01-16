@@ -213,7 +213,7 @@ impl<F: FieldExt> LinearChip<F> {
         &self,
         ctx: &mut RegionCtx<'_, F>,
         a: AssignedCell<F, F>,
-    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
+    ) -> Result<[AssignedCell<F, F>; 64], Error> {
         // decompose to 16 bits limbs
         let mut a_limbs = a
             .value()
@@ -263,7 +263,8 @@ impl<F: FieldExt> LinearChip<F> {
             ctx.next();
             bits.extend_from_slice(&bits_assigned.register);
         }
-        Ok(bits)
+
+        Ok(bits.try_into().unwrap())
     }
 
     pub fn from_bits(
@@ -274,10 +275,8 @@ impl<F: FieldExt> LinearChip<F> {
         let limbs = bits
             .chunks(16)
             .map(|chunk| {
-                let mut values = chunk.iter().map(|x| x.value().cloned()).collect::<Vec<_>>();
-                values.resize(NUM_REGISTERS, Value::known(F::zero()));
-                let mut constants = (0..4).map(|i| 1u64 << (16 * i)).collect::<Vec<_>>();
-                constants.resize(16, 0);
+                let values = chunk.iter().map(|x| x.value().cloned()).collect::<Vec<_>>();
+                let constants = (0..16).map(|i| 1u64 << i).collect::<Vec<_>>();
                 let assigned = self
                     .assign_combination(
                         ctx,
@@ -298,7 +297,6 @@ impl<F: FieldExt> LinearChip<F> {
         limbs_value.resize(NUM_REGISTERS, Value::known(F::zero()));
         let mut contants = (0..4).map(|i| 1u64 << (16 * i)).collect::<Vec<_>>();
         contants.resize(NUM_REGISTERS, 0);
-
         let assigned = self.assign_combination(
             ctx,
             limbs_value.try_into().unwrap(),
@@ -322,12 +320,15 @@ mod tests {
     use plonky2::field::goldilocks_field::GoldilocksField;
     use plonky2::field::types::{PrimeField64, Sample};
 
+    use crate::snark::chip::native_chip::utils::{bu_to_le_bits, fr_to_bu};
+
     use super::*;
 
     #[derive(Default)]
     struct TestCircuit {
-        r: [Value<Fr>; NUM_REGISTERS],
+        r: [Fr; NUM_REGISTERS],
         c: [u64; NUM_REGISTERS],
+        r0_bits: Vec<Fr>,
     }
 
     impl Circuit<Fr> for TestCircuit {
@@ -353,10 +354,34 @@ mod tests {
                 || "value",
                 |region| {
                     let mut ctx = RegionCtx::new(region, 0);
-                    let _assigned_combination =
-                        linear_chip.assign_combination(&mut ctx, self.r, self.c);
+                    let r = self.r.map(|x| Value::known(x));
+                    let assigned_combination = linear_chip
+                        .assign_combination(&mut ctx, r.clone(), self.c)
+                        .unwrap();
                     ctx.next();
-                    let _assigned_addition = linear_chip.assign_addition(&mut ctx, self.r, self.c);
+                    let _assigned_addition = linear_chip
+                        .assign_addition(&mut ctx, r.clone(), self.c)
+                        .unwrap();
+                    ctx.next();
+
+                    let r0 = assigned_combination.register[0].clone();
+                    let r0_bits = self
+                        .r0_bits
+                        .iter()
+                        .map(|x| Value::known(*x))
+                        .collect::<Vec<_>>();
+
+                    let decomposed_x_bits = linear_chip.to_bits(&mut ctx, r0.clone()).unwrap();
+                    decomposed_x_bits
+                        .iter()
+                        .zip(r0_bits.iter())
+                        .for_each(|(x, y)| {
+                            x.value().zip(*y).map(|(&x, y)| assert!(x == y));
+                        });
+
+                    let composed = linear_chip.from_bits(&mut ctx, decomposed_x_bits).unwrap();
+                    ctx.constrain_equal(r0.cell(), composed.cell()).unwrap();
+
                     Ok(())
                 },
             )?;
@@ -365,15 +390,20 @@ mod tests {
     }
 
     #[test]
-    fn test_assign_linear_chip() {
+    fn test_linear_chip() {
         let mut rng = rand::thread_rng();
         let r = [(); NUM_REGISTERS]
             .map(|_| GoldilocksField::sample(&mut rng))
-            .map(|x| Value::known(Fr::from(x.to_canonical_u64())));
+            .map(|x| Fr::from(x.to_canonical_u64()));
         let c = [(); NUM_REGISTERS]
             .map(|_| GoldilocksField::sample(&mut rng))
             .map(|x| x.to_canonical_u64());
-        let circuit = TestCircuit { r, c };
+
+        let r0 = r[0];
+        let mut r0_bits = bu_to_le_bits(fr_to_bu(r0));
+        r0_bits.resize(64, false);
+        let r0_bits = r0_bits.into_iter().map(|x| Fr::from(x)).collect::<Vec<_>>();
+        let circuit = TestCircuit { r, c, r0_bits };
         MockProver::run(10, &circuit, vec![])
             .unwrap()
             .assert_satisfied();
