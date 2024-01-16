@@ -1,0 +1,27 @@
+[package]
+name = "another-circuit"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# halo2curves = { git = "https://github.com/DoHoonKim8/halo2curves.git" }
+plonky2={git="https://github.com/kbizikav/plonky2"}
+halo2_proofs = { git = "https://github.com/privacy-scaling-explorations/halo2.git", features = ["dev-graph"], tag = "v2023_02_02" }
+halo2wrong = { git = "https://github.com/privacy-scaling-explorations/halo2wrong.git", tag = "v2023_02_02" }
+maingate = { git = "https://github.com/privacy-scaling-explorations/halo2wrong.git", tag = "v2023_02_02" }
+anyhow = "1.0.75"
+num-bigint = "0.4.4"
+num-integer = "0.1.45"
+rand = "0.8.5"
+
+[patch."https://github.com/privacy-scaling-explorations/halo2.git"]
+halo2_proofs={path="../halo2/halo2_proofs"}
+
+[patch."https://github.com/privacy-scaling-explorations/halo2wrong.git"]
+halo2wrong={path="../halo2wrong/halo2wrong"}
+maingate={path="../halo2wrong/maingate"}
+
+[patch."https://github.com/kbizikav/plonky2"]
+plonky2={path="../plonky2/plonky2"}
