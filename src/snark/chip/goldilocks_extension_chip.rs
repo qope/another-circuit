@@ -400,3 +400,5 @@ impl<F: FieldExt> GoldilocksExtensionChip<F> {
         self.arithmetic_extension(ctx, one, one, cond, &a_minus_b, b)
     }
 }
+
+
