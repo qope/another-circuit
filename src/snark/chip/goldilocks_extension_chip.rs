@@ -444,8 +444,6 @@ mod tests {
             mut layouter: impl halo2_proofs::circuit::Layouter<Fr>,
         ) -> Result<(), halo2_proofs::plonk::Error> {
             let goldilocks_extension_chip = GoldilocksExtensionChip::new(&config);
-            let arithmetic_chip = ArithmeticChip::construct(config.arithmetic_config);
-            arithmetic_chip.load_table(&mut layouter)?;
 
             let mut layouter = layouter.namespace(|| "decompose");
             layouter.assign_region(
@@ -493,8 +491,7 @@ mod tests {
                             <GoldilocksField as Extendable<2>>::Extension::from_canonical_u64(a.0);
                         let b =
                             <GoldilocksField as Extendable<2>>::Extension::from_canonical_u64(b.0);
-                        let output = a * x * y + b * z;
-                        gfe_to_fr(output)
+                        gfe_to_fr(a * x * y + b * z)
                     };
                     let expected_assigned = goldilocks_extension_chip
                         .assign_value_extension(&mut ctx, &expected.map(|x| Value::known(x)))?;
@@ -507,6 +504,8 @@ mod tests {
                     Ok(())
                 },
             )?;
+            let arithmetic_chip = ArithmeticChip::construct(config.arithmetic_config);
+            arithmetic_chip.load_table(&mut layouter)?;
             Ok(())
         }
     }

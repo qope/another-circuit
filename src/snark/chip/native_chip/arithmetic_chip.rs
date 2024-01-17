@@ -584,7 +584,7 @@ impl<F: FieldExt> ArithmeticChip<F> {
             0,
             0,
         )?;
-        self.take_mod(ctx, assigned.z)
+        self.take_mod(ctx, assigned.x)
     }
 
     pub fn assign_value_ext(
@@ -601,7 +601,7 @@ impl<F: FieldExt> ArithmeticChip<F> {
             [0; 2],
             [0; 2],
         )?;
-        self.take_mod_ext(ctx, assigned.z)
+        self.take_mod_ext(ctx, assigned.x)
     }
 
     pub fn assign_fixed(

@@ -267,3 +267,124 @@ impl<F: FieldExt> GoldilocksChip<F> {
         self.is_zero(ctx, &a_mimus_b)
     }
 }
+
+#[cfg(test)]
+mod tests {
+
+    use crate::snark::chip::goldilocks_chip::GoldilocksChipConfig;
+    use crate::snark::chip::native_chip::arithmetic_chip::{ArithmeticChip, ArithmeticConfig};
+    use crate::snark::chip::native_chip::linear_chip::LinearConfig;
+    use crate::snark::chip::native_chip::utils::gf_to_fr;
+
+    use halo2_proofs::circuit::{Layouter, Value};
+    use halo2_proofs::dev::MockProver;
+    use halo2_proofs::halo2curves::bn256::Fr;
+    use halo2_proofs::{circuit::SimpleFloorPlanner, plonk::Circuit};
+    use halo2wrong::RegionCtx;
+    use plonky2::field::goldilocks_field::GoldilocksField;
+    use plonky2::field::types::Sample;
+
+    use super::GoldilocksChip;
+
+    #[derive(Default)]
+    pub struct TestCircuit {
+        pub x: Fr,
+        pub y: Fr,
+        pub z: Fr,
+    }
+
+    impl Circuit<Fr> for TestCircuit {
+        type Config = GoldilocksChipConfig<Fr>;
+
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            Self::default()
+        }
+
+        fn configure(meta: &mut halo2_proofs::plonk::ConstraintSystem<Fr>) -> Self::Config {
+            let arithmetic_config = ArithmeticConfig::configure(meta);
+            let linear_config = LinearConfig::configure(meta);
+            GoldilocksChipConfig {
+                arithmetic_config,
+                linear_config,
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl halo2_proofs::circuit::Layouter<Fr>,
+        ) -> Result<(), halo2_proofs::plonk::Error> {
+            let goldilocks_chip = GoldilocksChip::new(&config);
+
+            let mut layouter = layouter.namespace(|| "decompose");
+            layouter.assign_region(
+                || "value",
+                |region| {
+                    let mut ctx = RegionCtx::new(region, 0);
+
+                    let _zero = goldilocks_chip.assign_value(&mut ctx, Value::known(Fr::zero()))?;
+                    let _one = goldilocks_chip.assign_value(&mut ctx, Value::known(Fr::from(1)))?;
+
+                    // goldilocks_chip.assert_equal(&mut ctx, &zero, &one)?;
+
+                    // let y_value = self.y.map(|x| Value::known(x));
+                    // let y_assigned =
+                    //     goldilocks_extension_chip.assign_value_extension(&mut ctx, &y_value)?;
+                    // let z_value = self.z.map(|x| Value::known(x));
+                    // let z_assigned =
+                    //     goldilocks_extension_chip.assign_value_extension(&mut ctx, &z_value)?;
+
+                    // let a = Goldilocks::from(2);
+                    // let b = Goldilocks::from(3);
+
+                    // let output = goldilocks_extension_chip.arithmetic_extension(
+                    //     &mut ctx,
+                    //     a,
+                    //     b,
+                    //     &x_assigned,
+                    //     &y_assigned,
+                    //     &z_assigned,
+                    // )?;
+                    // let expected = {
+                    //     let x = fr2_to_gfe(self.x);
+                    //     let y = fr2_to_gfe(self.y);
+                    //     let z = fr2_to_gfe(self.z);
+                    //     let a =
+                    //         <GoldilocksField as Extendable<2>>::Extension::from_canonical_u64(a.0);
+                    //     let b =
+                    //         <GoldilocksField as Extendable<2>>::Extension::from_canonical_u64(b.0);
+                    //     gfe_to_fr(a)
+                    // };
+                    // let expected_assigned = goldilocks_extension_chip
+                    //     .assign_value_extension(&mut ctx, &expected.map(|x| Value::known(x)))?;
+                    // goldilocks_extension_chip.assert_equal_extension(
+                    //     &mut ctx,
+                    //     &output,
+                    //     &expected_assigned,
+                    // )?;
+
+                    Ok(())
+                },
+            )?;
+            let arithmetic_chip = ArithmeticChip::construct(config.arithmetic_config);
+            arithmetic_chip.load_table(&mut layouter)?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_goldilocks_chip() {
+        let x = GoldilocksField::rand();
+        let x = gf_to_fr(x);
+        let y = GoldilocksField::rand();
+        let y = gf_to_fr(y);
+        let z = GoldilocksField::rand();
+        let z = gf_to_fr(z);
+        let circuit = TestCircuit { x, y, z };
+        MockProver::run(17, &circuit, vec![vec![]])
+            .unwrap()
+            .assert_satisfied();
+    }
+}
