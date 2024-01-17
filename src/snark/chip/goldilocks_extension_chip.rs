@@ -78,9 +78,8 @@ impl<F: FieldExt> GoldilocksExtensionChip<F> {
             .map(|(a, b)| assert!(*a != F::zero() || *b != F::zero()));
         let x_div_y = assigned_ext_div(x.0.clone(), y.0.clone());
         let x_div_y_assigned = self.assign_value_extension(ctx, &x_div_y)?;
-        let one = self.one_extension(ctx)?;
         let output = self.mul_extension(ctx, &x_div_y_assigned, &y)?;
-        self.assert_equal_extension(ctx, &output, &one)?;
+        self.assert_equal_extension(ctx, &output, &x)?;
         Ok(x_div_y_assigned)
     }
 
@@ -499,6 +498,28 @@ mod tests {
                         &mut ctx,
                         &output,
                         &expected_assigned,
+                    )?;
+
+                    let x_div_y = goldilocks_extension_chip.div_extension(
+                        &mut ctx,
+                        &x_assigned,
+                        &y_assigned,
+                    )?;
+
+                    let x_div_y_expected = {
+                        let x = fr2_to_gfe(self.x);
+                        let y = fr2_to_gfe(self.y);
+                        gfe_to_fr(x / y)
+                    };
+                    let x_div_y_expected_assigned = goldilocks_extension_chip
+                        .assign_value_extension(
+                            &mut ctx,
+                            &x_div_y_expected.map(|x| Value::known(x)),
+                        )?;
+                    goldilocks_extension_chip.assert_equal_extension(
+                        &mut ctx,
+                        &x_div_y,
+                        &x_div_y_expected_assigned,
                     )?;
 
                     Ok(())

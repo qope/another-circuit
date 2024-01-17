@@ -180,3 +180,11 @@ impl<F: FieldExt> HasherChip<F> {
         }
     }
 }
+
+// test haser_chip
+
+#[cfg(test)]
+mod tests {
+
+    
+}

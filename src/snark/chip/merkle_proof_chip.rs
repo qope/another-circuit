@@ -81,3 +81,5 @@ impl<F: FieldExt> MerkleProofChip<F> {
         Ok(())
     }
 }
+
+// test haser_chip
