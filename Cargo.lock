@@ -742,6 +742,7 @@ dependencies = [
 [[package]]
 name = "halo2_proofs"
 version = "0.2.0"
+source = "git+https://github.com/privacy-scaling-explorations/halo2.git?tag=v2023_02_02#0a8646b78286a13d320759b1c585262d6536dce4"
 dependencies = [
  "blake2b_simd",
  "ff",
@@ -809,6 +810,7 @@ dependencies = [
 [[package]]
 name = "halo2wrong"
 version = "0.1.0"
+source = "git+https://github.com/privacy-scaling-explorations/halo2wrong.git?tag=v2023_02_02#5905a20b62fcd9f6c269416a39c80de7ced8fb02"
 dependencies = [
  "group",
  "halo2_proofs",
@@ -1042,6 +1044,7 @@ checksum = "b5e6163cb8c49088c2c36f57875e58ccd8c87c7427f7fbd50ea6710b2f3f2e8f"
 [[package]]
 name = "maingate"
 version = "0.1.0"
+source = "git+https://github.com/privacy-scaling-explorations/halo2wrong.git?tag=v2023_02_02#5905a20b62fcd9f6c269416a39c80de7ced8fb02"
 dependencies = [
  "group",
  "halo2wrong",
@@ -1254,6 +1257,7 @@ checksum = "69d3587f8a9e599cc7ec2c00e331f71c4e69a5f9a4b8a6efd5b07466b9736f9a"
 [[package]]
 name = "plonky2"
 version = "0.1.4"
+source = "git+https://github.com/kbizikav/plonky2#0784d4c6c8f5a9193a66fb73dd784adef365a055"
 dependencies = [
  "ahash",
  "anyhow",
@@ -1277,6 +1281,7 @@ dependencies = [
 [[package]]
 name = "plonky2_field"
 version = "0.1.1"
+source = "git+https://github.com/kbizikav/plonky2#0784d4c6c8f5a9193a66fb73dd784adef365a055"
 dependencies = [
  "anyhow",
  "itertools 0.11.0",
@@ -1291,6 +1296,7 @@ dependencies = [
 [[package]]
 name = "plonky2_maybe_rayon"
 version = "0.1.1"
+source = "git+https://github.com/kbizikav/plonky2#0784d4c6c8f5a9193a66fb73dd784adef365a055"
 dependencies = [
  "rayon",
 ]
@@ -1298,6 +1304,7 @@ dependencies = [
 [[package]]
 name = "plonky2_util"
 version = "0.1.1"
+source = "git+https://github.com/kbizikav/plonky2#0784d4c6c8f5a9193a66fb73dd784adef365a055"
 
 [[package]]
 name = "plotters"
