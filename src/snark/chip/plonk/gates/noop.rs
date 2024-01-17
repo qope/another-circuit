@@ -25,16 +25,16 @@ impl<F: FieldExt> CustomGateConstrainer<F> for NoopGateConstrainer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::NoopGateConstrainer;
-//     use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
-//     use plonky2::gates::noop::NoopGate;
+#[cfg(test)]
+mod tests {
+    use super::NoopGateConstrainer;
+    use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
+    use plonky2::gates::noop::NoopGate;
 
-//     #[test]
-//     fn test_noop_gate() {
-//         let plonky2_gate = NoopGate;
-//         let halo2_gate = NoopGateConstrainer;
-//         test_custom_gate(plonky2_gate, halo2_gate, 4);
-//     }
-// }
+    #[test]
+    fn test_noop_gate() {
+        let plonky2_gate = NoopGate;
+        let halo2_gate = NoopGateConstrainer;
+        test_custom_gate(plonky2_gate, halo2_gate, 17);
+    }
+}

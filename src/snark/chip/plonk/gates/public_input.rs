@@ -41,16 +41,16 @@ impl<F: FieldExt> CustomGateConstrainer<F> for PublicInputGateConstrainer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::PublicInputGateConstrainer;
-//     use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
-//     use plonky2::gates::public_input::PublicInputGate;
+#[cfg(test)]
+mod tests {
+    use super::PublicInputGateConstrainer;
+    use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
+    use plonky2::gates::public_input::PublicInputGate;
 
-//     #[test]
-//     fn test_public_input_gate() {
-//         let plonky2_gate = PublicInputGate;
-//         let halo2_gate = PublicInputGateConstrainer;
-//         test_custom_gate(plonky2_gate, halo2_gate, 12);
-//     }
-// }
+    #[test]
+    fn test_public_input_gate() {
+        let plonky2_gate = PublicInputGate;
+        let halo2_gate = PublicInputGateConstrainer;
+        test_custom_gate(plonky2_gate, halo2_gate, 17);
+    }
+}

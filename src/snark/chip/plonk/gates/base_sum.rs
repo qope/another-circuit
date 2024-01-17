@@ -62,24 +62,24 @@ impl<F: FieldExt> CustomGateConstrainer<F> for BaseSumGateConstrainer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::BaseSumGateConstrainer;
-//     use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
-//     use plonky2::{
-//         field::goldilocks_field::GoldilocksField, gates::base_sum::BaseSumGate,
-//         plonk::circuit_data::CircuitConfig,
-//     };
+#[cfg(test)]
+mod tests {
+    use super::BaseSumGateConstrainer;
+    use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
+    use plonky2::{
+        field::goldilocks_field::GoldilocksField, gates::base_sum::BaseSumGate,
+        plonk::circuit_data::CircuitConfig,
+    };
 
-//     type F = GoldilocksField;
+    type F = GoldilocksField;
 
-//     #[test]
-//     fn test_base_sum_gate() {
-//         let plonky2_gate =
-//             BaseSumGate::<2>::new_from_config::<F>(&CircuitConfig::standard_recursion_config());
-//         let halo2_gate = BaseSumGateConstrainer {
-//             num_limbs: plonky2_gate.num_limbs,
-//         };
-//         test_custom_gate(plonky2_gate, halo2_gate, 12);
-//     }
-// }
+    #[test]
+    fn test_base_sum_gate() {
+        let plonky2_gate =
+            BaseSumGate::<2>::new_from_config::<F>(&CircuitConfig::standard_recursion_config());
+        let halo2_gate = BaseSumGateConstrainer {
+            num_limbs: plonky2_gate.num_limbs,
+        };
+        test_custom_gate(plonky2_gate, halo2_gate, 17);
+    }
+}

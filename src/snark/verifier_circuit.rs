@@ -158,6 +158,7 @@ impl Circuit<Fr> for Verifier {
             layouter.namespace(|| "Assign verification key"),
             &self.vk,
         )?;
+
         layouter.assign_region(
             || "Verify proof",
             |region| {
@@ -183,6 +184,7 @@ impl Circuit<Fr> for Verifier {
                 )
             },
         )?;
+
         // for (row, public_input) in
         //     (0..self.instances.len()).zip_eq(assigned_proof_with_pis.public_inputs)
         // {

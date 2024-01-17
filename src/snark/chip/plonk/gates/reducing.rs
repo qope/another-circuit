@@ -87,18 +87,18 @@ impl<F: FieldExt> CustomGateConstrainer<F> for ReducingGateConstrainer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::ReducingGateConstrainer;
-//     use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
-//     use plonky2::gates::reducing::ReducingGate;
+#[cfg(test)]
+mod tests {
+    use super::ReducingGateConstrainer;
+    use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
+    use plonky2::gates::reducing::ReducingGate;
 
-//     #[test]
-//     fn test_reducing_gate() {
-//         let plonky2_gate = ReducingGate::new(4);
-//         let halo2_gate = ReducingGateConstrainer {
-//             num_coeffs: plonky2_gate.num_coeffs,
-//         };
-//         test_custom_gate(plonky2_gate, halo2_gate, 9);
-//     }
-// }
+    #[test]
+    fn test_reducing_gate() {
+        let plonky2_gate = ReducingGate::new(4);
+        let halo2_gate = ReducingGateConstrainer {
+            num_coeffs: plonky2_gate.num_coeffs,
+        };
+        test_custom_gate(plonky2_gate, halo2_gate, 17);
+    }
+}

@@ -620,15 +620,6 @@ impl<F: FieldExt> CustomGateConstrainer<F> for PoseidonGateConstrainer {
             round_ctr += 1;
         }
 
-        // Partial rounds.
-        // for r in 0..R_P {
-        //     self.constant_layer(ctx, goldilocks_chip_config, &mut state, round_ctr);
-        //     let sbox_in = &local_wires[Self::wire_partial_sbox(r)];
-        //     constraints.push(goldilocks_extension_chip.sub_extension(ctx, &state[0], sbox_in)?);
-        //     state[0] = self.sbox(ctx, goldilocks_chip_config, sbox_in)?;
-        //     self.mds_layer(ctx, goldilocks_chip_config, &mut state);
-        //     round_ctr += 1;
-        // }
         self.partial_first_constant_layer(ctx, goldilocks_chip_config, &mut state);
         state = self.mds_partial_layer_init(ctx, goldilocks_chip_config, &state);
         for r in 0..(R_P - 1) {
@@ -672,16 +663,18 @@ impl<F: FieldExt> CustomGateConstrainer<F> for PoseidonGateConstrainer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::PoseidonGateConstrainer;
-//     use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
-//     use plonky2::gates::poseidon::PoseidonGate;
+#[cfg(test)]
+mod tests {
+    use super::PoseidonGateConstrainer;
+    use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
+    use plonky2::gates::poseidon::PoseidonGate;
 
-//     #[test]
-//     fn test_poseidon_gate() {
-//         let plonky2_gate = PoseidonGate::new();
-//         let halo2_gate = PoseidonGateConstrainer;
-//         test_custom_gate(plonky2_gate, halo2_gate, 16);
-//     }
-// }
+
+    // todo: fix
+    #[test]
+    fn test_poseidon_gate() {
+        let plonky2_gate = PoseidonGate::new();
+        let halo2_gate = PoseidonGateConstrainer;
+        test_custom_gate(plonky2_gate, halo2_gate, 17);
+    }
+}

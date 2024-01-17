@@ -67,8 +67,7 @@ impl<F: FieldExt> GoldilocksChip<F> {
         ctx: &mut RegionCtx<'_, F>,
         constant: Goldilocks,
     ) -> Result<AssignedValue<F>, Error> {
-        let constant: F = big_to_fe(fe_to_big::<Goldilocks>(constant));
-        self.assign_value(ctx, Value::known(constant))
+        self.arithmetic_chip().assign_fixed(ctx, constant.0)
     }
 
     pub fn add(
@@ -90,7 +89,6 @@ impl<F: FieldExt> GoldilocksChip<F> {
         self.arithmetic_chip().sub(ctx, lhs.clone(), rhs.clone())
     }
 
-    // TODO : range check
     pub fn mul(
         &self,
         ctx: &mut RegionCtx<'_, F>,

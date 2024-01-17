@@ -35,8 +35,10 @@ use super::ProofTuple;
 
 type PlonkVerifier = verifier::plonk::PlonkVerifier<KzgAs<Bn256, Gwc19>>;
 
+const DEGREE: usize = 20;
+
 lazy_static! {
-    static ref SRS: ParamsKZG<Bn256> = EvmVerifier::gen_srs(23);
+    static ref SRS: ParamsKZG<Bn256> = EvmVerifier::gen_srs(DEGREE as u32);
 }
 
 pub struct EvmVerifier;
@@ -45,22 +47,6 @@ impl EvmVerifier {
     pub fn gen_srs(k: u32) -> ParamsKZG<Bn256> {
         ParamsKZG::<Bn256>::setup(k, OsRng)
     }
-
-    // fn prepare_params(path: PathBuf) -> ParamsKZG<Bn256> {
-    //     let srs = Srs::<Bn256>::read(
-    //         &mut std::fs::File::open(path.clone())
-    //             .with_context(|| format!("Failed to read .srs file {}", path.to_str().unwrap()))
-    //             .unwrap(),
-    //         SrsFormat::PerpetualPowerOfTau(23),
-    //     );
-
-    //     let mut buf = Vec::new();
-    //     srs.write_raw(&mut buf);
-    //     let params = ParamsKZG::<Bn256>::read(&mut std::io::Cursor::new(buf))
-    //         .with_context(|| "Malformed params file")
-    //         .unwrap();
-    //     params
-    // }
 
     pub fn gen_pk<C: Circuit<Fr>>(params: &ParamsKZG<Bn256>, circuit: &C) -> ProvingKey<G1Affine> {
         let vk = keygen_vk(params, circuit).unwrap();
@@ -76,7 +62,6 @@ impl EvmVerifier {
         MockProver::run(params.k(), &circuit, instances.clone())
             .unwrap()
             .assert_satisfied();
-
         let instances = instances
             .iter()
             .map(|instances| instances.as_slice())
@@ -143,27 +128,6 @@ impl EvmVerifier {
 
         evm::compile_yul(&loader.yul_code())
     }
-
-    // fn evm_verify(deployment_code: Vec<u8>, instances: Vec<Vec<Fr>>, proof: Vec<u8>) {
-    //     let calldata = encode_calldata(&instances, &proof);
-    //     let success = {
-    //         let mut evm = ExecutorBuilder::default()
-    //             .with_gas_limit(u64::MAX.into())
-    //             .build();
-
-    //         let caller = evm::Address::from_low_u64_be(0xfe);
-    //         let verifier = evm
-    //             .deploy(caller, deployment_code.into(), 0.into())
-    //             .address
-    //             .unwrap();
-    //         let result = evm.call_raw(caller, verifier, calldata.into(), 0.into());
-
-    //         dbg!(result.gas_used);
-
-    //         !result.reverted
-    //     };
-    //     assert!(success);
-    // }
 }
 
 fn report_elapsed(now: Instant) {
@@ -193,7 +157,7 @@ pub fn verify_inside_snark_mock(proof: ProofTuple<GoldilocksField, PoseidonGoldi
     let common_data = CommonData::from(cd);
 
     let verifier_circuit = Verifier::new(proof, instances.clone(), vk, common_data);
-    let _prover = MockProver::run(23, &verifier_circuit, vec![instances]).unwrap();
+    let _prover = MockProver::run(DEGREE as u32, &verifier_circuit, vec![instances]).unwrap();
     _prover.assert_satisfied()
 }
 
@@ -213,7 +177,7 @@ pub fn verify_inside_snark(proof: ProofTuple<GoldilocksField, PoseidonGoldilocks
 
     // runs mock prover
     let circuit = Verifier::new(proof, instances.clone(), vk, common_data);
-    let mock_prover = MockProver::run(23, &circuit, vec![instances.clone()]).unwrap();
+    let mock_prover = MockProver::run(DEGREE as u32, &circuit, vec![instances.clone()]).unwrap();
     mock_prover.assert_satisfied();
     println!("{}", "Mock prover passes".white().bold());
 
@@ -240,7 +204,6 @@ pub fn verify_inside_snark(proof: ProofTuple<GoldilocksField, PoseidonGoldilocks
 
 #[cfg(test)]
 mod tests {
-    use halo2curves::group::ff::PrimeField;
     use plonky2::{
         field::types::Field,
         hash::{
@@ -325,31 +288,5 @@ mod tests {
         let mut srs_file = File::create("srs_direct.dat").unwrap();
         srs.write(&mut srs_file).unwrap();
         println!("saved to file directory {:?}", now.elapsed());
-    }
-
-    #[test]
-    fn test_proof_serialize() {
-        let elements = [
-            529046520345309696,
-            10371022369205081073,
-            10439533348402280691,
-            7751503723378059010,
-        ];
-        let inputs = elements
-            .iter()
-            .map(|&x| F::from_canonical_u64(x))
-            .collect::<Vec<_>>();
-
-        let instances = inputs
-            .iter()
-            .map(|e| big_to_fe(fe_to_big::<Goldilocks>(types::to_goldilocks(*e))))
-            .collect::<Vec<Fr>>();
-
-        let converted = instances
-            .iter()
-            .flat_map(|value| value.to_repr().as_ref().iter().rev().cloned().collect_vec())
-            .collect_vec();
-
-        dbg!(converted.len());
     }
 }

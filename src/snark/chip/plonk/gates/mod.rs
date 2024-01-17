@@ -43,7 +43,7 @@ pub mod random_access;
 pub mod reducing;
 pub mod reducing_extension;
 
-// pub mod gate_test;
+pub mod gate_test;
 
 /// Evaluate custom gate constraints in `plonk_zeta` inside maingate.
 pub trait CustomGateConstrainer<F: FieldExt>: CustomGateConstrainerClone<F> + Send + Sync {

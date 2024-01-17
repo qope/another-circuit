@@ -5,7 +5,7 @@ use halo2_proofs::{
 };
 use halo2curves::{bn256::Fr, goldilocks::fp::Goldilocks};
 use halo2wrong::RegionCtx;
-use halo2wrong_maingate::{big_to_fe, fe_to_big, MainGate, MainGateConfig};
+use halo2wrong_maingate::{big_to_fe, fe_to_big};
 use plonky2::{
     field::types::Sample,
     field::{
@@ -19,7 +19,13 @@ use plonky2::{
 
 use super::CustomGateConstrainer;
 use crate::snark::{
-    chip::goldilocks_chip::{GoldilocksChip, GoldilocksChipConfig},
+    chip::{
+        goldilocks_chip::{GoldilocksChip, GoldilocksChipConfig},
+        native_chip::{
+            arithmetic_chip::{ArithmeticChip, ArithmeticConfig},
+            linear_chip::LinearConfig,
+        },
+    },
     types::{
         self,
         assigned::{AssignedExtensionFieldValue, AssignedHashValues},
@@ -88,7 +94,12 @@ impl<'a, Gate: CustomGateConstrainer<Fr>> Circuit<Fr> for TestCircuit<'a, Gate> 
     }
 
     fn configure(meta: &mut ConstraintSystem<Fr>) -> Self::Config {
-        MainGate::configure(meta)
+        let arithmetic_config = ArithmeticConfig::configure(meta);
+        let linear_config = LinearConfig::configure(meta);
+        Self::Config {
+            arithmetic_config,
+            linear_config,
+        }
     }
 
     fn synthesize(
@@ -96,6 +107,8 @@ impl<'a, Gate: CustomGateConstrainer<Fr>> Circuit<Fr> for TestCircuit<'a, Gate> 
         config: Self::Config,
         mut layouter: impl Layouter<Fr>,
     ) -> Result<(), halo2_proofs::plonk::Error> {
+        let goldilocks_chip_config =
+            GoldilocksChip::<Fr>::configure(&config.arithmetic_config, &config.linear_config);
         layouter.assign_region(
             || "",
             |region| {
@@ -141,6 +154,8 @@ impl<'a, Gate: CustomGateConstrainer<Fr>> Circuit<Fr> for TestCircuit<'a, Gate> 
                 Ok(())
             },
         )?;
+        let arithmetic_chip = ArithmeticChip::construct(config.arithmetic_config);
+        arithmetic_chip.load_table(&mut layouter)?;
 
         Ok(())
     }

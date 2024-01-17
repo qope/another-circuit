@@ -82,23 +82,23 @@ impl<F: FieldExt> CustomGateConstrainer<F> for ArithmeticExtensionGateConstraine
     }
 }
 
-// #[cfg(test)]
-// mod tests {
+#[cfg(test)]
+mod tests {
 
-//     use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
-//     use plonky2::{
-//         gates::arithmetic_extension::ArithmeticExtensionGate, plonk::circuit_data::CircuitConfig,
-//     };
+    use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
+    use plonky2::{
+        gates::arithmetic_extension::ArithmeticExtensionGate, plonk::circuit_data::CircuitConfig,
+    };
 
-//     use super::ArithmeticExtensionGateConstrainer;
+    use super::ArithmeticExtensionGateConstrainer;
 
-//     #[test]
-//     fn test_arithmetic_extension_gate() {
-//         let plonky2_gate =
-//             ArithmeticExtensionGate::new_from_config(&CircuitConfig::standard_recursion_config());
-//         let halo2_gate = ArithmeticExtensionGateConstrainer {
-//             num_ops: plonky2_gate.num_ops,
-//         };
-//         test_custom_gate(plonky2_gate, halo2_gate, 11);
-//     }
-// }
+    #[test]
+    fn test_arithmetic_extension_gate() {
+        let plonky2_gate =
+            ArithmeticExtensionGate::new_from_config(&CircuitConfig::standard_recursion_config());
+        let halo2_gate = ArithmeticExtensionGateConstrainer {
+            num_ops: plonky2_gate.num_ops,
+        };
+        test_custom_gate(plonky2_gate, halo2_gate, 17);
+    }
+}

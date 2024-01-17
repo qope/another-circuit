@@ -72,10 +72,14 @@ impl<F: FieldExt> GoldilocksExtensionChip<F> {
         x: &AssignedExtensionFieldValue<F, 2>,
         y: &AssignedExtensionFieldValue<F, 2>,
     ) -> Result<AssignedExtensionFieldValue<F, 2>, Error> {
+        y.0[0]
+            .value()
+            .zip(y.0[1].value())
+            .map(|(a, b)| assert!(*a != F::zero() || *b != F::zero()));
         let x_div_y = assigned_ext_div(x.0.clone(), y.0.clone());
         let x_div_y_assigned = self.assign_value_extension(ctx, &x_div_y)?;
         let one = self.one_extension(ctx)?;
-        let output = self.mul_extension(ctx, &x_div_y_assigned, &one)?;
+        let output = self.mul_extension(ctx, &x_div_y_assigned, &y)?;
         self.assert_equal_extension(ctx, &output, &one)?;
         Ok(x_div_y_assigned)
     }
@@ -400,5 +404,3 @@ impl<F: FieldExt> GoldilocksExtensionChip<F> {
         self.arithmetic_extension(ctx, one, one, cond, &a_minus_b, b)
     }
 }
-
-

@@ -149,21 +149,21 @@ impl<F: FieldExt> CustomGateConstrainer<F> for RandomAccessGateConstrainer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::RandomAccessGateConstrainer;
-//     use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
-//     use plonky2::{gates::random_access::RandomAccessGate, plonk::circuit_data::CircuitConfig};
+#[cfg(test)]
+mod tests {
+    use super::RandomAccessGateConstrainer;
+    use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
+    use plonky2::{gates::random_access::RandomAccessGate, plonk::circuit_data::CircuitConfig};
 
-//     #[test]
-//     fn test_random_access_gate() {
-//         let config = CircuitConfig::default();
-//         let plonky2_gate = RandomAccessGate::new_from_config(&config, 2);
-//         let halo2_gate = RandomAccessGateConstrainer {
-//             bits: plonky2_gate.bits,
-//             num_copies: plonky2_gate.num_copies,
-//             num_extra_constants: plonky2_gate.num_extra_constants,
-//         };
-//         test_custom_gate(plonky2_gate, halo2_gate, 12);
-//     }
-// }
+    #[test]
+    fn test_random_access_gate() {
+        let config = CircuitConfig::default();
+        let plonky2_gate = RandomAccessGate::new_from_config(&config, 2);
+        let halo2_gate = RandomAccessGateConstrainer {
+            bits: plonky2_gate.bits,
+            num_copies: plonky2_gate.num_copies,
+            num_extra_constants: plonky2_gate.num_extra_constants,
+        };
+        test_custom_gate(plonky2_gate, halo2_gate, 17);
+    }
+}

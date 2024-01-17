@@ -116,16 +116,16 @@ impl<F: FieldExt> CustomGateConstrainer<F> for PoseidonMDSGateConstrainer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::PoseidonMDSGateConstrainer;
-//     use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
-//     use plonky2::gates::poseidon_mds::PoseidonMdsGate;
+#[cfg(test)]
+mod tests {
+    use super::PoseidonMDSGateConstrainer;
+    use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
+    use plonky2::gates::poseidon_mds::PoseidonMdsGate;
 
-//     #[test]
-//     fn test_poseidon_mds_gate() {
-//         let plonky2_gate = PoseidonMdsGate::new();
-//         let halo2_gate = PoseidonMDSGateConstrainer;
-//         test_custom_gate(plonky2_gate, halo2_gate, 13);
-//     }
-// }
+    #[test]
+    fn test_poseidon_mds_gate() {
+        let plonky2_gate = PoseidonMdsGate::new();
+        let halo2_gate = PoseidonMDSGateConstrainer;
+        test_custom_gate(plonky2_gate, halo2_gate, 17);
+    }
+}
