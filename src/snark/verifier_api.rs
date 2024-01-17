@@ -35,7 +35,7 @@ use super::ProofTuple;
 
 type PlonkVerifier = verifier::plonk::PlonkVerifier<KzgAs<Bn256, Gwc19>>;
 
-const DEGREE: usize = 20;
+const DEGREE: usize = 22;
 
 lazy_static! {
     static ref SRS: ParamsKZG<Bn256> = EvmVerifier::gen_srs(DEGREE as u32);
