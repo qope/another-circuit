@@ -193,7 +193,7 @@ impl<F: FieldExt> GoldilocksChip<F> {
         let minus_one = GOLDILOCKS_MODULUS - 1;
         let r = self
             .arithmetic_chip()
-            .generic_add(ctx, minus_one, 1, a.clone(), b_assigned)?;
+            .generic_mul(ctx, minus_one, 1, a.clone(), b_assigned)?;
         let should_zero = self.mul(ctx, &r, a)?;
         self.assert_zero(ctx, &should_zero)?;
         Ok(r)
@@ -324,46 +324,14 @@ mod tests {
                 |region| {
                     let mut ctx = RegionCtx::new(region, 0);
 
-                    let _zero = goldilocks_chip.assign_value(&mut ctx, Value::known(Fr::zero()))?;
-                    let _one = goldilocks_chip.assign_value(&mut ctx, Value::known(Fr::from(1)))?;
+                    let zero = goldilocks_chip.assign_value(&mut ctx, Value::known(Fr::zero()))?;
+                    let one = goldilocks_chip.assign_value(&mut ctx, Value::known(Fr::from(1)))?;
 
-                    // goldilocks_chip.assert_equal(&mut ctx, &zero, &one)?;
+                    let should_be_true = goldilocks_chip.is_zero(&mut ctx, &zero)?;
+                    let should_be_false = goldilocks_chip.is_zero(&mut ctx, &one)?;
 
-                    // let y_value = self.y.map(|x| Value::known(x));
-                    // let y_assigned =
-                    //     goldilocks_extension_chip.assign_value_extension(&mut ctx, &y_value)?;
-                    // let z_value = self.z.map(|x| Value::known(x));
-                    // let z_assigned =
-                    //     goldilocks_extension_chip.assign_value_extension(&mut ctx, &z_value)?;
-
-                    // let a = Goldilocks::from(2);
-                    // let b = Goldilocks::from(3);
-
-                    // let output = goldilocks_extension_chip.arithmetic_extension(
-                    //     &mut ctx,
-                    //     a,
-                    //     b,
-                    //     &x_assigned,
-                    //     &y_assigned,
-                    //     &z_assigned,
-                    // )?;
-                    // let expected = {
-                    //     let x = fr2_to_gfe(self.x);
-                    //     let y = fr2_to_gfe(self.y);
-                    //     let z = fr2_to_gfe(self.z);
-                    //     let a =
-                    //         <GoldilocksField as Extendable<2>>::Extension::from_canonical_u64(a.0);
-                    //     let b =
-                    //         <GoldilocksField as Extendable<2>>::Extension::from_canonical_u64(b.0);
-                    //     gfe_to_fr(a)
-                    // };
-                    // let expected_assigned = goldilocks_extension_chip
-                    //     .assign_value_extension(&mut ctx, &expected.map(|x| Value::known(x)))?;
-                    // goldilocks_extension_chip.assert_equal_extension(
-                    //     &mut ctx,
-                    //     &output,
-                    //     &expected_assigned,
-                    // )?;
+                    should_be_true.value().map(|x| assert!(*x == Fr::one()));
+                    should_be_false.value().map(|x| assert!(*x == Fr::zero()));
 
                     Ok(())
                 },

@@ -29,12 +29,12 @@ hex = "0.4.3"
 derive_more = "0.99.17"
 num = { version = "0.4", default-features = false, features = ["rand"] }
 
-[patch."https://github.com/privacy-scaling-explorations/halo2.git"]
-halo2_proofs={path="../halo2/halo2_proofs"}
+# [patch."https://github.com/privacy-scaling-explorations/halo2.git"]
+# halo2_proofs={path="../halo2/halo2_proofs"}
 
-[patch."https://github.com/privacy-scaling-explorations/halo2wrong.git"]
-halo2wrong={path="../halo2wrong/halo2wrong"}
-maingate={path="../halo2wrong/maingate"}
+# [patch."https://github.com/privacy-scaling-explorations/halo2wrong.git"]
+# halo2wrong={path="../halo2wrong/halo2wrong"}
+# maingate={path="../halo2wrong/maingate"}
 
-[patch."https://github.com/kbizikav/plonky2"]
-plonky2={path="../plonky2/plonky2"}
+# [patch."https://github.com/kbizikav/plonky2"]
+# plonky2={path="../plonky2/plonky2"}
