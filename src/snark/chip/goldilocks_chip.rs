@@ -67,7 +67,8 @@ impl<F: FieldExt> GoldilocksChip<F> {
         ctx: &mut RegionCtx<'_, F>,
         constant: Goldilocks,
     ) -> Result<AssignedValue<F>, Error> {
-        self.arithmetic_chip().assign_fixed(ctx, constant.0)
+        self.arithmetic_chip()
+            .assign_fixed(ctx, constant.to_canonical_u64())
     }
 
     pub fn add(

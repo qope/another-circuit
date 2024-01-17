@@ -669,12 +669,10 @@ mod tests {
     use crate::snark::chip::plonk::gates::gate_test::test_custom_gate;
     use plonky2::gates::poseidon::PoseidonGate;
 
-
-    // todo: fix
     #[test]
     fn test_poseidon_gate() {
         let plonky2_gate = PoseidonGate::new();
         let halo2_gate = PoseidonGateConstrainer;
-        test_custom_gate(plonky2_gate, halo2_gate, 17);
+        test_custom_gate(plonky2_gate, halo2_gate, 18);
     }
 }

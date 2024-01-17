@@ -101,14 +101,14 @@ impl<F: FieldExt> GoldilocksExtensionChip<F> {
         addend_0: &AssignedExtensionFieldValue<F, 2>,
         addend_1: &AssignedExtensionFieldValue<F, 2>,
     ) -> Result<AssignedExtensionFieldValue<F, 2>, Error> {
-        let goldilocks_chip = self.goldilocks_chip();
-        let added = addend_0
-            .0
-            .iter()
-            .zip(addend_1.0.iter())
-            .map(|(addend_0, addend_1)| goldilocks_chip.add(ctx, addend_0, addend_1))
-            .collect::<Result<Vec<AssignedValue<F>>, Error>>()?;
-        Ok(AssignedExtensionFieldValue(added.try_into().unwrap()))
+        let z = self.arithmetic_chip().generic_add_ext(
+            ctx,
+            [1, 0],
+            [0, 0],
+            addend_0.0.clone(),
+            addend_1.0.clone(),
+        )?;
+        Ok(AssignedExtensionFieldValue(z))
     }
 
     pub fn scalar_mul(
@@ -117,14 +117,15 @@ impl<F: FieldExt> GoldilocksExtensionChip<F> {
         multiplicand: &AssignedExtensionFieldValue<F, 2>,
         scalar: Goldilocks,
     ) -> Result<AssignedExtensionFieldValue<F, 2>, Error> {
-        let goldilocks_chip = self.goldilocks_chip();
-        let assigned_scalar = goldilocks_chip.assign_constant(ctx, scalar)?;
-        let multiplied = multiplicand
-            .0
-            .iter()
-            .map(|v| goldilocks_chip.mul(ctx, v, &assigned_scalar))
-            .collect::<Result<Vec<AssignedValue<F>>, Error>>()?;
-        Ok(AssignedExtensionFieldValue(multiplied.try_into().unwrap()))
+        let one = self.one_extension(ctx)?;
+        let z = self.arithmetic_chip().generic_mul_ext(
+            ctx,
+            [scalar.to_canonical_u64(), 0],
+            [0, 0],
+            multiplicand.0.clone(),
+            one.0.clone(),
+        )?;
+        Ok(AssignedExtensionFieldValue(z))
     }
 
     /// const_0 * multiplicand_0 * multiplicand_1 + const_1 * addend
@@ -137,48 +138,37 @@ impl<F: FieldExt> GoldilocksExtensionChip<F> {
         multiplicand_1: &AssignedExtensionFieldValue<F, 2>,
         addend: &AssignedExtensionFieldValue<F, 2>,
     ) -> Result<AssignedExtensionFieldValue<F, 2>, Error> {
-        // multiplicand_0 * multiplicand_1
-        let mut term_1 = self.mul(ctx, multiplicand_0, multiplicand_1)?;
-        // const_0 * multiplicand_0 * multiplicand_1
-        term_1 = self.scalar_mul(ctx, &term_1, const_0)?;
-        // const_1 * addend
-        let term_2 = self.scalar_mul(ctx, addend, const_1)?;
-        self.add_extension(ctx, &term_1, &term_2)
+        let z = self.arithmetic_chip().generic_mul_add_ext(
+            ctx,
+            [const_0.to_canonical_u64(), 0],
+            [const_1.to_canonical_u64(), 0],
+            [0, 0],
+            multiplicand_0.0.clone(),
+            multiplicand_1.0.clone(),
+            addend.0.clone(),
+        )?;
+        Ok(AssignedExtensionFieldValue(z))
     }
 
     pub fn zero_extension(
         &self,
         ctx: &mut RegionCtx<'_, F>,
     ) -> Result<AssignedExtensionFieldValue<F, 2>, Error> {
-        let goldilocks_chip = self.goldilocks_chip();
-        let elements = (0..2)
-            .map(|_| goldilocks_chip.assign_constant(ctx, Goldilocks::zero()))
-            .collect::<Result<Vec<AssignedValue<F>>, Error>>()?;
-        Ok(AssignedExtensionFieldValue(elements.try_into().unwrap()))
+        self.constant_extension(ctx, &[Goldilocks::zero(), Goldilocks::zero()])
     }
 
     pub fn one_extension(
         &self,
         ctx: &mut RegionCtx<'_, F>,
     ) -> Result<AssignedExtensionFieldValue<F, 2>, Error> {
-        let goldilocks_chip = self.goldilocks_chip();
-        let elements = [
-            goldilocks_chip.assign_constant(ctx, Goldilocks::one())?,
-            goldilocks_chip.assign_constant(ctx, Goldilocks::zero())?,
-        ];
-        Ok(AssignedExtensionFieldValue(elements))
+        self.constant_extension(ctx, &[Goldilocks::one(), Goldilocks::zero()])
     }
 
     pub fn two_extension(
         &self,
         ctx: &mut RegionCtx<'_, F>,
     ) -> Result<AssignedExtensionFieldValue<F, 2>, Error> {
-        let goldilocks_chip = self.goldilocks_chip();
-        let elements = [
-            goldilocks_chip.assign_constant(ctx, Goldilocks::from(2))?,
-            goldilocks_chip.assign_constant(ctx, Goldilocks::zero())?,
-        ];
-        Ok(AssignedExtensionFieldValue(elements))
+        self.constant_extension(ctx, &[Goldilocks::from(2), Goldilocks::zero()])
     }
 
     pub fn mul_extension_with_const(
@@ -297,12 +287,10 @@ impl<F: FieldExt> GoldilocksExtensionChip<F> {
         ctx: &mut RegionCtx<'_, F>,
         constant: &[Goldilocks; 2],
     ) -> Result<AssignedExtensionFieldValue<F, 2>, Error> {
-        let goldilocks_chip = self.goldilocks_chip();
-        let elements = constant
-            .into_iter()
-            .map(|c| goldilocks_chip.assign_constant(ctx, *c))
-            .collect::<Result<Vec<AssignedValue<F>>, Error>>()?;
-        Ok(AssignedExtensionFieldValue(elements.try_into().unwrap()))
+        let z = self
+            .arithmetic_chip()
+            .assign_fixed_ext(ctx, constant.clone().map(|x| x.to_canonical_u64()))?;
+        Ok(AssignedExtensionFieldValue(z))
     }
 
     pub fn convert_to_extension(
@@ -402,5 +390,138 @@ impl<F: FieldExt> GoldilocksExtensionChip<F> {
         let a_minus_b = self.sub_extension(ctx, a, b)?;
         let one = Goldilocks::one();
         self.arithmetic_extension(ctx, one, one, cond, &a_minus_b, b)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    use crate::snark::chip::goldilocks_chip::GoldilocksChipConfig;
+    use crate::snark::chip::native_chip::arithmetic_chip::{ArithmeticChip, ArithmeticConfig};
+    use crate::snark::chip::native_chip::linear_chip::LinearConfig;
+    use crate::snark::chip::native_chip::utils::{fr2_to_gfe, gfe_to_fr};
+
+    use halo2_proofs::circuit::{Layouter, Value};
+    use halo2_proofs::dev::MockProver;
+    use halo2_proofs::halo2curves::bn256::Fr;
+    use halo2_proofs::{circuit::SimpleFloorPlanner, plonk::Circuit};
+    use halo2curves::goldilocks::fp::Goldilocks;
+    use halo2wrong::RegionCtx;
+    use plonky2::field::extension::Extendable;
+    use plonky2::field::goldilocks_field::GoldilocksField;
+    use plonky2::field::types::{Field, Sample};
+
+    use super::GoldilocksExtensionChip;
+
+    #[derive(Default)]
+    struct TestCircuit {
+        x: [Fr; 2],
+        y: [Fr; 2],
+        z: [Fr; 2],
+    }
+
+    impl Circuit<Fr> for TestCircuit {
+        type Config = GoldilocksChipConfig<Fr>;
+
+        type FloorPlanner = SimpleFloorPlanner;
+
+        fn without_witnesses(&self) -> Self {
+            Self::default()
+        }
+
+        fn configure(meta: &mut halo2_proofs::plonk::ConstraintSystem<Fr>) -> Self::Config {
+            let arithmetic_config = ArithmeticConfig::configure(meta);
+            let linear_config = LinearConfig::configure(meta);
+            GoldilocksChipConfig {
+                arithmetic_config,
+                linear_config,
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl halo2_proofs::circuit::Layouter<Fr>,
+        ) -> Result<(), halo2_proofs::plonk::Error> {
+            let goldilocks_extension_chip = GoldilocksExtensionChip::new(&config);
+            let arithmetic_chip = ArithmeticChip::construct(config.arithmetic_config);
+            arithmetic_chip.load_table(&mut layouter)?;
+
+            let mut layouter = layouter.namespace(|| "decompose");
+            layouter.assign_region(
+                || "value",
+                |region| {
+                    let mut ctx = RegionCtx::new(region, 0);
+
+                    let x_value = self.x.map(|x| Value::known(x));
+                    let x_assigned =
+                        goldilocks_extension_chip.assign_value_extension(&mut ctx, &x_value)?;
+
+                    let x_pow_7 = goldilocks_extension_chip.exp(&mut ctx, &x_assigned, 7)?;
+                    let expected = gfe_to_fr(fr2_to_gfe(self.x).exp_u64(7));
+                    let expected_assigned = goldilocks_extension_chip
+                        .assign_value_extension(&mut ctx, &expected.map(|x| Value::known(x)))?;
+                    goldilocks_extension_chip.assert_equal_extension(
+                        &mut ctx,
+                        &x_pow_7,
+                        &expected_assigned,
+                    )?;
+
+                    let y_value = self.y.map(|x| Value::known(x));
+                    let y_assigned =
+                        goldilocks_extension_chip.assign_value_extension(&mut ctx, &y_value)?;
+                    let z_value = self.z.map(|x| Value::known(x));
+                    let z_assigned =
+                        goldilocks_extension_chip.assign_value_extension(&mut ctx, &z_value)?;
+
+                    let a = Goldilocks::from(2);
+                    let b = Goldilocks::from(3);
+
+                    let output = goldilocks_extension_chip.arithmetic_extension(
+                        &mut ctx,
+                        a,
+                        b,
+                        &x_assigned,
+                        &y_assigned,
+                        &z_assigned,
+                    )?;
+                    let expected = {
+                        let x = fr2_to_gfe(self.x);
+                        let y = fr2_to_gfe(self.y);
+                        let z = fr2_to_gfe(self.z);
+                        let a =
+                            <GoldilocksField as Extendable<2>>::Extension::from_canonical_u64(a.0);
+                        let b =
+                            <GoldilocksField as Extendable<2>>::Extension::from_canonical_u64(b.0);
+                        let output = a * x * y + b * z;
+                        gfe_to_fr(output)
+                    };
+                    let expected_assigned = goldilocks_extension_chip
+                        .assign_value_extension(&mut ctx, &expected.map(|x| Value::known(x)))?;
+                    goldilocks_extension_chip.assert_equal_extension(
+                        &mut ctx,
+                        &output,
+                        &expected_assigned,
+                    )?;
+
+                    Ok(())
+                },
+            )?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_goldilocks_extension_chip() {
+        let x = <GoldilocksField as Extendable<2>>::Extension::rand();
+        let x = gfe_to_fr(x);
+        let y = <GoldilocksField as Extendable<2>>::Extension::rand();
+        let y = gfe_to_fr(y);
+        let z = <GoldilocksField as Extendable<2>>::Extension::rand();
+        let z = gfe_to_fr(z);
+        let circuit = TestCircuit { x, y, z };
+        MockProver::run(17, &circuit, vec![vec![]])
+            .unwrap()
+            .assert_satisfied();
     }
 }

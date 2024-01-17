@@ -563,7 +563,7 @@ impl<F: FieldExt> ArithmeticChip<F> {
         )?;
         ctx.constrain_equal(a[0].cell(), assigned.x[0].cell())?;
         ctx.constrain_equal(a[1].cell(), assigned.x[1].cell())?;
-        ctx.constrain_equal(b[0].cell(), assigned.y[1].cell())?;
+        ctx.constrain_equal(b[0].cell(), assigned.y[0].cell())?;
         ctx.constrain_equal(b[1].cell(), assigned.y[1].cell())?;
         ctx.constrain_equal(c[0].cell(), assigned.z[0].cell())?;
         ctx.constrain_equal(c[1].cell(), assigned.z[1].cell())?;
