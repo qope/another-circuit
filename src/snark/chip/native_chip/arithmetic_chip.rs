@@ -445,10 +445,10 @@ impl<F: FieldExt> ArithmeticChip<F> {
         let assigned = self.assign_ext(
             ctx,
             a.clone().map(|x| x.value().cloned()),
-            [Value::known(F::one()); 2],
+            [Value::known(F::one()), Value::known(F::zero())],
             b.clone().map(|x| x.value().cloned()),
             c0,
-            [1; 2],
+            [1, 0],
             c1,
         )?;
         ctx.constrain_equal(a[0].cell(), assigned.x[0].cell())?;
