@@ -23,3 +23,15 @@ pub type ProofTuple<F, C, const D: usize> = (
     VerifierOnlyCircuitData<C, D>,
     CommonCircuitData<F, D>,
 );
+
+#[cfg(test)]
+pub mod test_contract_size;
+
+#[cfg(test)]
+pub mod test_arithmetic_contract;
+
+#[cfg(test)]
+pub mod test_linear_contract;
+
+#[cfg(test)]
+pub mod test_goldilocks_contract;

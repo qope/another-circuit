@@ -7,6 +7,7 @@ use halo2_proofs::{
 
 use halo2wrong::RegionCtx;
 use halo2wrong_maingate::AssignedValue;
+use itertools::Itertools;
 
 use super::{
     chip::{
@@ -184,14 +185,14 @@ impl Circuit<Fr> for Verifier {
                 )
             },
         )?;
-
-        // for (row, public_input) in
-        //     (0..self.instances.len()).zip_eq(assigned_proof_with_pis.public_inputs)
-        // {
-        //     main_gate.expose_public(layouter.namespace(|| ""), public_input, row)?;
-        // }
         let arithmetic_chip = ArithmeticChip::construct(config.arithmetic_config);
         arithmetic_chip.load_table(&mut layouter)?;
+
+        for (row, public_input) in
+            (0..self.instances.len()).zip_eq(assigned_proof_with_pis.public_inputs)
+        {
+            arithmetic_chip.expose_public(layouter.namespace(|| ""), public_input, row)?;
+        }
         Ok(())
     }
 }

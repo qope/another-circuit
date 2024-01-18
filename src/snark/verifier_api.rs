@@ -267,9 +267,15 @@ mod tests {
     }
 
     #[test]
-    fn test_recursive_halo2() {
+    fn test_recursive_halo2_mock() {
         let proof = generate_proof_tuple();
         verify_inside_snark_mock(proof);
+    }
+
+    #[test]
+    fn test_recursive_halo2_proof() {
+        let proof = generate_proof_tuple();
+        verify_inside_snark(proof);
     }
 
     #[test]
