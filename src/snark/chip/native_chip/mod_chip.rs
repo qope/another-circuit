@@ -159,7 +159,7 @@ impl<F: FieldExt> ModChip<F> {
         let (m, r) = unassigned
             .map(|x| {
                 let x_bu = fe_to_big(x);
-                assert!(x_bu.bits() <= (MAX_M_BITS * 64) as u64);
+                assert!(x_bu.bits() <= (MAX_M_BITS + 64) as u64);
                 let (m, r) = x_bu.div_rem(&BigUint::from(GOLDILOCKS_MODULUS));
                 let m = big_to_fe(m);
                 let r = big_to_fe(r);
@@ -225,16 +225,6 @@ impl<F: FieldExt> ModChip<F> {
         let r = self.take_mod(ctx, assigned.clone())?;
         ctx.constrain_equal(r.cell(), assigned.cell())?;
         Ok(())
-    }
-
-    pub fn take_mod_and_decompose(
-        &self,
-        ctx: &mut RegionCtx<'_, F>,
-        x: AssignedCell<F, F>,
-    ) -> Result<Vec<AssignedCell<F, F>>, Error> {
-        let assigned = self.assign_mod(ctx, x.value().cloned())?;
-        ctx.constrain_equal(assigned.target.cell(), x.cell())?;
-        Ok(assigned.r_limbs)
     }
 
     pub fn load_table(

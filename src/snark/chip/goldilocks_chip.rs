@@ -54,6 +54,11 @@ impl<F: FieldExt> GoldilocksChip<F> {
         big_to_fe::<F>(fe_to_big::<Goldilocks>(goldilocks))
     }
 
+    // assumes `fe` is already in goldilocks field
+    fn native_fe_to_goldilocks(&self, fe: F) -> Goldilocks {
+        big_to_fe::<Goldilocks>(fe_to_big::<F>(fe))
+    }
+
     pub fn assign_value(
         &self,
         ctx: &mut RegionCtx<'_, F>,
@@ -186,7 +191,8 @@ impl<F: FieldExt> GoldilocksChip<F> {
             if v == F::zero() {
                 F::zero()
             } else {
-                v.invert().unwrap()
+                let v = self.native_fe_to_goldilocks(v);
+                self.goldilocks_to_native_fe(v.invert().unwrap())
             }
         });
         let b_assigned = self.assign_value(ctx, b)?;
@@ -325,10 +331,11 @@ mod tests {
                     let mut ctx = RegionCtx::new(region, 0);
 
                     let zero = goldilocks_chip.assign_value(&mut ctx, Value::known(Fr::zero()))?;
-                    let one = goldilocks_chip.assign_value(&mut ctx, Value::known(Fr::from(1)))?;
+                    let three =
+                        goldilocks_chip.assign_value(&mut ctx, Value::known(Fr::from(3)))?;
 
                     let should_be_true = goldilocks_chip.is_zero(&mut ctx, &zero)?;
-                    let should_be_false = goldilocks_chip.is_zero(&mut ctx, &one)?;
+                    let should_be_false = goldilocks_chip.is_zero(&mut ctx, &three)?;
 
                     should_be_true.value().map(|x| assert!(*x == Fr::one()));
                     should_be_false.value().map(|x| assert!(*x == Fr::zero()));
