@@ -126,6 +126,10 @@ impl EvmVerifier {
         let proof = PlonkVerifier::read_proof(&vk, &protocol, &instances, &mut transcript).unwrap();
         PlonkVerifier::verify(&vk, &protocol, &instances, &proof).unwrap();
 
+        let yul_code = loader.yul_code();
+        let mut file = File::create("yul_code.txt").unwrap();
+        file.write_all(yul_code.as_bytes()).unwrap();
+
         evm::compile_yul(&loader.yul_code())
     }
 }
