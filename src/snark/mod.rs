@@ -35,3 +35,6 @@ pub mod test_linear_contract;
 
 #[cfg(test)]
 pub mod test_goldilocks_contract;
+
+#[cfg(test)]
+pub mod test_mod_contract;

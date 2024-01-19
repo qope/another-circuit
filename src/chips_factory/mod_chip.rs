@@ -13,7 +13,7 @@ use num_integer::Integer;
 
 pub const GOLDILOCKS_MODULUS: u64 = ((1 << 32) - 1) * (1 << 32) + 1;
 const NUM_BITS: usize = 16;
-const NUM_M_LIMBS: usize = 5;
+const NUM_M_LIMBS: usize = 9;
 const MAX_M_BITS: usize = NUM_BITS * NUM_M_LIMBS;
 const NUM_R_LIMBS: usize = 4;
 
@@ -251,15 +251,21 @@ impl<F: FieldExt> ModChip<F> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs::File;
+    use std::io::Write;
+
     use halo2_proofs::circuit::{Layouter, Value};
     use halo2_proofs::dev::MockProver;
-    use halo2_proofs::halo2curves::bn256::Fr;
+    use halo2_proofs::halo2curves::bn256::{Bn256, Fr};
+    use halo2_proofs::poly::kzg::commitment::ParamsKZG;
     use halo2_proofs::{circuit::SimpleFloorPlanner, plonk::Circuit};
     use halo2wrong::RegionCtx;
 
+    use crate::snark::verifier_api::EvmVerifier;
+
     use super::{ModChip, ModConfig};
 
-    #[derive(Default)]
+    #[derive(Default, Clone)]
     struct TestCircuit {
         value: Fr,
     }
@@ -295,7 +301,6 @@ mod tests {
                     range_chip
                         .range_check(&mut ctx, assigned.r.clone())
                         .unwrap();
-                    dbg!(assigned.r.value());
                     Ok(())
                 },
             )?;
@@ -304,12 +309,29 @@ mod tests {
     }
 
     #[test]
-    fn test_mod_chip() {
+    fn test_mod_chip_size() {
+        const DEGREE: u32 = 17;
+
         let circuit = TestCircuit {
             value: Fr::from(124),
         };
         MockProver::run(17, &circuit, vec![])
             .unwrap()
             .assert_satisfied();
+        println!("{}", "Mock prover passes");
+
+        // generates EVM verifier
+        let srs: ParamsKZG<Bn256> = EvmVerifier::gen_srs(DEGREE);
+        let pk = EvmVerifier::gen_pk(&srs, &circuit);
+        let deployment_code = EvmVerifier::gen_evm_verifier(&srs, pk.get_vk(), vec![]);
+
+        // generates SNARK proof and runs EVM verifier
+        println!("{}", "Starting finalization phase");
+        let _proof = EvmVerifier::gen_proof(&srs, &pk, circuit.clone(), vec![]);
+        println!("{}", "SNARK proof generated successfully!");
+
+        let deployment_code_hex = "0x".to_string() + &hex::encode(deployment_code);
+        let mut file = File::create("deployment_code.txt").unwrap();
+        file.write_all(deployment_code_hex.as_bytes()).unwrap();
     }
 }

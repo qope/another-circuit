@@ -1,3 +1,5 @@
+use std::{fs::File, io::Write};
+
 use halo2_proofs::{
     circuit::{floor_planner::V1, Layouter, Value},
     dev::MockProver,
@@ -118,7 +120,7 @@ impl Circuit<Fr> for TestCircuit {
     }
 }
 
-const DEGREE: u32 = 8;
+const DEGREE: u32 = 22;
 
 #[test]
 fn test_contract_compile() {
@@ -130,12 +132,18 @@ fn test_contract_compile() {
     // generates EVM verifier
     let srs: ParamsKZG<Bn256> = EvmVerifier::gen_srs(DEGREE);
     let pk = EvmVerifier::gen_pk(&srs, &circuit);
-    let _deployment_code = EvmVerifier::gen_evm_verifier(&srs, pk.get_vk(), vec![0]);
+    let deployment_code = EvmVerifier::gen_evm_verifier(&srs, pk.get_vk(), vec![0]);
 
     // generates SNARK proof and runs EVM verifier
     println!("{}", "Starting finalization phase");
     let proof = EvmVerifier::gen_proof(&srs, &pk, circuit.clone(), vec![vec![]]);
     println!("{}", "SNARK proof generated successfully!");
 
-    let _calldata = encode_calldata::<Fr>(&[vec![]], &proof);
+    let calldata = encode_calldata::<Fr>(&[vec![]], &proof);
+    let deployment_code_hex = "0x".to_string() + &hex::encode(deployment_code);
+    let calldata_hex = "0x".to_string() + &hex::encode(calldata);
+    let mut file = File::create("deployment_code.txt").unwrap();
+    file.write_all(deployment_code_hex.as_bytes()).unwrap();
+    let mut file = File::create("calldata.txt").unwrap();
+    file.write_all(calldata_hex.as_bytes()).unwrap();
 }
