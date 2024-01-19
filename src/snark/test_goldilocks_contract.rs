@@ -63,8 +63,10 @@ impl Circuit<Fr> for TestCircuit {
                 };
                 let hash_chip = PoseidonChip::construct(poseidon_config);
 
-                let state = [(); 12].map(|_| x.clone());
-                let _hash = hash_chip.permute(ctx, state)?;
+                let mut state = [(); 12].map(|_| x.clone());
+                for _ in 0..1000 {
+                    state = hash_chip.permute(ctx, state)?;
+                }
 
                 Ok(())
             },
@@ -77,7 +79,7 @@ impl Circuit<Fr> for TestCircuit {
     }
 }
 
-const DEGREE: u32 = 17;
+const DEGREE: u32 = 20;
 
 #[test]
 fn test_goldilocks_contract() {
