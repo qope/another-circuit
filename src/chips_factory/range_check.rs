@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use halo2_proofs::{
-    circuit::{Layouter, Value},
+    circuit::{AssignedCell, Layouter, Value},
     halo2curves::FieldExt,
     plonk::{Advice, Column, ConstraintSystem, Error, Expression, Selector, TableColumn},
     poly::Rotation,
@@ -15,6 +15,7 @@ pub const GOLDILOCKS_MODULUS: u64 = ((1 << 32) - 1) * (1 << 32) + 1;
 const NUM_BITS: usize = 16;
 const NUM_M_LIMBS: usize = 9;
 const MAX_M_BITS: usize = NUM_BITS * NUM_M_LIMBS;
+const NUM_R_LIMBS: usize = 4;
 
 #[derive(Clone, Debug)]
 pub struct ModConfig<F: FieldExt> {
@@ -32,8 +33,12 @@ impl<F: FieldExt> ModConfig<F> {
         let table = meta.lookup_table_column();
         let m = meta.advice_column();
         let m_limbs = [(); NUM_M_LIMBS].map(|_| meta.advice_column());
+        let r = meta.advice_column();
+        let r_limbs = [(); NUM_R_LIMBS].map(|_| meta.advice_column());
+        let p_r_limbs = [(); NUM_R_LIMBS].map(|_| meta.advice_column());
         let selector = meta.selector();
 
+        meta.enable_equality(r);
         meta.enable_equality(target);
 
         // check that 0<= m < 2^(NUM_BITS * NUM_M_LIMBS)
@@ -57,11 +62,64 @@ impl<F: FieldExt> ModConfig<F> {
                 vec![(l, table)]
             });
         });
+        // check that r < 2^64
+        meta.create_gate("r decompose", |meta| {
+            let s = meta.query_selector(selector);
+            let r = meta.query_advice(r, Rotation::cur());
+            let r_limbs = r_limbs
+                .map(|l| meta.query_advice(l, Rotation::cur()))
+                .to_vec();
+            let acc = (0..4).fold(Expression::Constant(F::zero()), |acc, i| {
+                let two_pow_i = Expression::Constant(F::from(1 << (NUM_BITS * i)));
+                acc + r_limbs[i].clone() * two_pow_i
+            });
+            let diff = acc - r;
+            vec![s * diff]
+        });
+        r_limbs.iter().for_each(|limb| {
+            meta.lookup("r_limbs range check", |meta| {
+                let l = meta.query_advice(*limb, Rotation::cur());
+                vec![(l, table)]
+            });
+        });
+        // check that p-r < 2^64
+        meta.create_gate("p-r decompose", |meta| {
+            let s = meta.query_selector(selector);
+            let r = meta.query_advice(r, Rotation::cur());
+            let p_r = Expression::Constant(F::from(GOLDILOCKS_MODULUS)) - r;
+            let p_r_limbs = p_r_limbs
+                .map(|l| meta.query_advice(l, Rotation::cur()))
+                .to_vec();
+            let acc = (0..4).fold(Expression::Constant(F::zero()), |acc, i| {
+                let two_pow_i = Expression::Constant(F::from(1 << (NUM_BITS * i)));
+                acc + p_r_limbs[i].clone() * two_pow_i
+            });
+            let diff = acc - p_r;
+            vec![s * diff]
+        });
+        p_r_limbs.iter().for_each(|limb| {
+            meta.lookup("r_limbs range check", |meta| {
+                let l = meta.query_advice(*limb, Rotation::cur());
+                vec![(l, table)]
+            });
+        });
+
+        // check that target = m * p + r
+        meta.create_gate("target = m * p + r", |meta| {
+            let s = meta.query_selector(selector);
+            let t = meta.query_advice(target, Rotation::cur());
+            let m = meta.query_advice(m, Rotation::cur());
+            let r = meta.query_advice(r, Rotation::cur());
+            vec![s * (t - m * Expression::Constant(F::from(GOLDILOCKS_MODULUS)) - r)]
+        });
 
         ModConfig {
             target,
             m,
             m_limbs,
+            r,
+            r_limbs,
+            p_r_limbs,
             selector,
             table,
             _marker: PhantomData,
@@ -86,18 +144,19 @@ impl<F: FieldExt> ModChip<F> {
         &self,
         ctx: &mut RegionCtx<'_, F>,
         unassigned: Value<F>,
-    ) -> Result<(), Error> {
+    ) -> Result<ModAssigned<F>, Error> {
         ctx.enable(self.config.selector).unwrap();
-        let (m, _) = unassigned
+        // assertion and compute m and r
+        let (m, r) = unassigned
             .map(|x| {
                 let x_bu = fe_to_big(x);
                 assert!(x_bu.bits() <= (MAX_M_BITS + 64) as u64);
                 let (m, r) = x_bu.div_rem(&BigUint::from(GOLDILOCKS_MODULUS));
                 let m = big_to_fe(m);
+                let r = big_to_fe(r);
                 (m, r)
             })
             .unzip();
-        let _m_assigned = ctx.assign_advice(|| "", self.config.m, m)?;
         let m_limbs = m
             .map(|x| decompose(x, NUM_M_LIMBS, NUM_BITS))
             .transpose_vec(NUM_M_LIMBS);
@@ -108,7 +167,54 @@ impl<F: FieldExt> ModChip<F> {
             .zip(m_limbs.iter())
             .map(|(limb_col, limb)| ctx.assign_advice(|| "", *limb_col, *limb).unwrap())
             .collect::<Vec<_>>();
-        let _target_assigned = ctx.assign_advice(|| "", self.config.target, unassigned)?;
+        let r_limbs = r
+            .map(|x| decompose(x, NUM_R_LIMBS, NUM_BITS))
+            .transpose_vec(NUM_R_LIMBS);
+        let r_limbs_assigned = self
+            .config
+            .r_limbs
+            .iter()
+            .zip(r_limbs.iter())
+            .map(|(limb_col, limb)| ctx.assign_advice(|| "", *limb_col, *limb).unwrap())
+            .collect::<Vec<_>>();
+        let p_r = Value::known(F::from(GOLDILOCKS_MODULUS)) - r;
+        let p_r_limbs = p_r
+            .map(|x| decompose(x, NUM_R_LIMBS, NUM_BITS))
+            .transpose_vec(NUM_R_LIMBS);
+        let _p_r_limbs_assigned = self
+            .config
+            .p_r_limbs
+            .iter()
+            .zip(p_r_limbs.iter())
+            .map(|(limb_col, limb)| ctx.assign_advice(|| "", *limb_col, *limb).unwrap())
+            .collect::<Vec<_>>();
+        let _m_assigned = ctx.assign_advice(|| "", self.config.m, m)?;
+        let r_assigned = ctx.assign_advice(|| "", self.config.r, r)?;
+        let target_assigned = ctx.assign_advice(|| "", self.config.target, unassigned)?;
+        Ok(ModAssigned {
+            target: target_assigned,
+            r: r_assigned,
+            r_limbs: r_limbs_assigned,
+        })
+    }
+
+    pub fn take_mod(
+        &self,
+        ctx: &mut RegionCtx<'_, F>,
+        x: AssignedCell<F, F>,
+    ) -> Result<AssignedCell<F, F>, Error> {
+        let assigned = self.assign_mod(ctx, x.value().cloned())?;
+        ctx.constrain_equal(assigned.target.cell(), x.cell())?;
+        Ok(assigned.r)
+    }
+
+    pub fn range_check(
+        &self,
+        ctx: &mut RegionCtx<'_, F>,
+        assigned: AssignedCell<F, F>,
+    ) -> Result<(), Error> {
+        let r = self.take_mod(ctx, assigned.clone())?;
+        ctx.constrain_equal(r.cell(), assigned.cell())?;
         Ok(())
     }
 
@@ -180,8 +286,11 @@ mod tests {
                 || "value",
                 |region| {
                     let mut ctx = RegionCtx::new(region, 0);
-                    range_chip
+                    let assigned = range_chip
                         .assign_mod(&mut ctx, Value::known(self.value))
+                        .unwrap();
+                    range_chip
+                        .range_check(&mut ctx, assigned.r.clone())
                         .unwrap();
                     Ok(())
                 },
@@ -192,12 +301,12 @@ mod tests {
 
     #[test]
     fn test_mod_chip_size() {
-        const DEGREE: u32 = 22;
+        const DEGREE: u32 = 17;
 
         let circuit = TestCircuit {
             value: Fr::from(124),
         };
-        MockProver::run(DEGREE, &circuit, vec![])
+        MockProver::run(17, &circuit, vec![])
             .unwrap()
             .assert_satisfied();
         println!("{}", "Mock prover passes");
