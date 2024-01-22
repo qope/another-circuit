@@ -38,3 +38,6 @@ pub mod test_goldilocks_contract;
 
 #[cfg(test)]
 pub mod test_mod_contract;
+
+#[cfg(test)]
+pub mod test_range_chip_contract;

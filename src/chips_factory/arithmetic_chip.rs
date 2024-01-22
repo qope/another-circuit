@@ -127,6 +127,16 @@ impl<F: FieldExt> ArithmeticChip<F> {
         Ok(())
     }
 
+    pub fn assert_equal(
+        &mut self,
+        ctx: &mut RegionCtx<'_, F>,
+        a: &AssignedCell<F, F>,
+        b: &AssignedCell<F, F>,
+    ) -> Result<(), Error> {
+        ctx.constrain_equal(a.cell(), b.cell())?;
+        Ok(())
+    }
+
     pub fn assign_no_next(
         &mut self,
         ctx: &mut RegionCtx<'_, F>,
@@ -179,12 +189,19 @@ impl<F: FieldExt> ArithmeticChip<F> {
 
     // Compute c = \sum a*b mod p, ensuring c is 64bit number, but do not check if c < p.
     // this consumes 2 rows.
-    pub fn assign_take_mod_lazy(
+    pub fn assign_take_mod_loose(
         &mut self,
         ctx: &mut RegionCtx<'_, F>,
         a: [Value<F>; NUM_VARS],
         b: [Value<F>; NUM_VARS],
     ) -> Result<AssignedArithmetic<F>, Error> {
+        // assign constants to avoid unwanted ctx.next()
+        // let _zero = self.assign_constant(ctx, 0)?;
+        // let _one = self.assign_constant(ctx, 1)?;
+        // let _modulus = self.assign_constant(ctx, GOLDILOCKS_MODULUS)?;
+        let range_chip = RangeChip::new(&self.config.range_chip_config);
+
+        // the first row
         let abc_assigned = self.assign_no_next(ctx, a, b)?;
         let (m, r) = abc_assigned
             .c
@@ -197,13 +214,15 @@ impl<F: FieldExt> ArithmeticChip<F> {
                 (m, r)
             })
             .unzip();
-        let range_chip = RangeChip::new(&self.config.range_chip_config);
+        let (m_assigned, _m_limbs_assigned) = range_chip.assign_decompose_no_next(ctx, m)?;
+        ctx.next();
+
+        // the second row
         let modulus = Value::known(F::from(GOLDILOCKS_MODULUS));
         let zero = Value::known(F::zero());
         let one = Value::known(F::one());
         let mul_add_assigned =
             self.assign_no_next(ctx, [m, r, zero, zero], [modulus, one, zero, zero])?; // c = m * modulus + r
-        let (m_assigned, _m_limbs_assigned) = range_chip.assign_decompose_no_next(ctx, m)?;
         ctx.constrain_equal(m_assigned.cell(), mul_add_assigned.a[0].cell())?;
         let r_assigned = mul_add_assigned.a[1].clone();
         self.assert_constant(ctx, &mul_add_assigned.a[2], 0)?;
@@ -212,58 +231,59 @@ impl<F: FieldExt> ArithmeticChip<F> {
         self.assert_constant(ctx, &mul_add_assigned.b[1], 1)?;
         self.assert_constant(ctx, &mul_add_assigned.b[2], 0)?;
         self.assert_constant(ctx, &mul_add_assigned.b[3], 0)?;
-        ctx.next();
         let r_limbs_assigned = range_chip.decompose(ctx, &r_assigned)?;
-        self.assert_constant(ctx, &r_limbs_assigned[4], 0)?; // r[4] = 0
+        self.assert_constant(ctx, &r_limbs_assigned[4], 0)?;
+
         Ok(abc_assigned)
     }
 
-    pub fn take_mod_lazy(
+    pub fn take_mod_loose(
         &mut self,
         ctx: &mut RegionCtx<'_, F>,
         a: [AssignedCell<F, F>; NUM_VARS],
         b: [AssignedCell<F, F>; NUM_VARS],
     ) -> Result<AssignedCell<F, F>, Error> {
-        let assigned = self.assign_take_mod_lazy(
+        let assigned = self.assign_take_mod_loose(
             ctx,
             a.clone().map(|x| x.value().cloned()),
             b.clone().map(|x| x.value().cloned()),
         )?;
         for i in 0..NUM_VARS {
-            ctx.constrain_equal(assigned.a[i].cell(), a[i].cell())?;
-            ctx.constrain_equal(assigned.b[i].cell(), b[i].cell())?;
+            self.assert_equal(ctx, &assigned.a[i], &a[i])?;
+            self.assert_equal(ctx, &assigned.b[i], &b[i])?;
         }
         Ok(assigned.c)
     }
 
-    // pub fn assign(
+    // pub fn assign_take_mod_strict(
     //     &mut self,
-    //     meta: &mut ConstraintSystem<F>,
-    //     a: [F; NUM_VARS],
-    //     b: [F; NUM_VARS],
-    //     c: F,
-    // ) {
-    //     let config = &self.config;
-    //     let a = a.map(|x| self.assign_constant(meta, x));
-    //     let b = b.map(|x| self.assign_constant(meta, x));
-    //     let c = self.assign_constant(meta, c);
-    //     meta.assign_advice(|| "a", config.a[0], 0, || Ok(a[0].value))
-    //         .unwrap();
-    //     meta.assign_advice(|| "a", config.a[1], 0, || Ok(a[1].value))
-    //         .unwrap();
-    //     meta.assign_advice(|| "a", config.a[2], 0, || Ok(a[2].value))
-    //         .unwrap();
-    //     meta.assign_advice(|| "a", config.a[3], 0, || Ok(a[3].value))
-    //         .unwrap();
-    //     meta.assign_advice(|| "b", config.b[0], 0, || Ok(b[0].value))
-    //         .unwrap();
-    //     meta.assign_advice(|| "b", config.b[1], 0, || Ok(b[1].value))
-    //         .unwrap();
-    //     meta.assign_advice(|| "b", config.b[2], 0, || Ok(b[2].value))
-    //         .unwrap();
-    //     meta.assign_advice(|| "b", config.b[3], 0, || Ok(b[3].value))
-    //         .unwrap();
-    //     meta.assign_advice(|| "c", config.c, 0, || Ok(c.value))
-    //         .unwrap();
+    //     ctx: &mut RegionCtx<'_, F>,
+    //     a: [Value<F>; NUM_VARS],
+    //     b: [Value<F>; NUM_VARS],
+    // ) -> Result<AssignedArithmetic<F>, Error> {
+    //     let assigned = self.assign_take_mod_loose(ctx, a, b)?;
+    //     let range_chip = RangeChip::new(&self.config.range_chip_config);
+
+    //     let c = assigned.c.clone();
+    //     let modulus = Value::known(F::from(GOLDILOCKS_MODULUS));
+    //     let diff = modulus.clone() - c.value().cloned();
+    //     let (diff_assigned, diff_limbs_assigned) =
+    //         range_chip.assign_decompose_no_next(ctx, diff)?;
+
+    //     let (c_loose, c_limbs) = range_chip.assign_decompose_no_next(ctx, c.value().cloned())?;
+
+    //     Ok(c_loose)
     // }
+
+    pub fn assign_with_loose_range_check(
+        &mut self,
+        ctx: &mut RegionCtx<'_, F>,
+        unassigned: Value<F>,
+    ) -> Result<AssignedCell<F, F>, Error> {
+        let range_chip = RangeChip::new(&self.config.range_chip_config);
+        let (assigned, assigned_limbs) = range_chip.assign_decompose_no_next(ctx, unassigned)?;
+        ctx.next();
+        self.assert_constant(ctx, &assigned_limbs[4], 0)?;
+        Ok(assigned)
+    }
 }
