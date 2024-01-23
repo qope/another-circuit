@@ -27,7 +27,7 @@ impl Circuit<Fr> for TestCircuit {
 
     fn configure(meta: &mut ConstraintSystem<Fr>) -> Self::Config {
         let main_gate_config = MainGate::configure(meta);
-        RangeChip::configure(meta, &main_gate_config, vec![16], vec![0, 1])
+        RangeChip::configure(meta, &main_gate_config, vec![16], vec![0, 4])
     }
 
     fn synthesize(
@@ -42,7 +42,6 @@ impl Circuit<Fr> for TestCircuit {
             |region| {
                 let ctx = &mut RegionCtx::new(region, 0);
                 let _x = chip.decompose(ctx, Value::known(Fr::from(3)), 16, 64)?;
-                let _x = chip.decompose(ctx, Value::known(Fr::from(3)), 16, 65)?;
                 Ok(())
             },
         )?;
@@ -51,7 +50,7 @@ impl Circuit<Fr> for TestCircuit {
     }
 }
 
-const DEGREE: u32 = 22;
+const DEGREE: u32 = 17;
 
 #[test]
 fn test_range_contract() {

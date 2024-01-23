@@ -11,7 +11,7 @@ use halo2wrong_maingate::{decompose, fe_to_big};
 use num_bigint::BigUint;
 
 pub const RANGE_CHIP_NUM_BITS: usize = 16;
-pub const RANGE_CHIP_NUM_LIMBS: usize = 5;
+pub const RANGE_CHIP_NUM_LIMBS: usize = 9;
 pub const RANGE_CHIP_MAX_BITS: usize = RANGE_CHIP_NUM_BITS * RANGE_CHIP_NUM_LIMBS;
 
 #[derive(Clone, Debug)]
@@ -30,7 +30,6 @@ impl<F: FieldExt> RangeChipConfig<F> {
         let selector = meta.selector();
         let table = meta.lookup_table_column();
         meta.enable_equality(target);
-        limbs.iter().for_each(|limb| meta.enable_equality(*limb));
 
         // check that 0<= target < 2^MAX_BITS
         meta.create_gate("range chip: limb decompose", |meta| {

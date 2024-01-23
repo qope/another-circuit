@@ -5,17 +5,18 @@ use halo2curves::{goldilocks::fp::Goldilocks, FieldExt};
 use halo2wrong::RegionCtx;
 use halo2wrong_maingate::{
     big_to_fe, decompose, fe_to_big, power_of_two, AssignedCondition, AssignedValue,
-    CombinationOptionCommon, MainGate, MainGateConfig, MainGateInstructions, Term,
+    CombinationOptionCommon, MainGate, MainGateConfig, MainGateInstructions, RangeChip,
+    RangeConfig, RangeInstructions, Term,
 };
 use itertools::Itertools;
 use num_bigint::BigUint;
 use num_integer::Integer;
 use num_traits::{Num, Zero};
 
-// TODO : range check
 #[derive(Clone, Debug)]
 pub struct GoldilocksChipConfig<F: FieldExt> {
     pub main_gate_config: MainGateConfig,
+    pub range_config: RangeConfig,
     _marker: PhantomData<F>,
 }
 
@@ -24,9 +25,13 @@ pub struct GoldilocksChip<F: FieldExt> {
 }
 
 impl<F: FieldExt> GoldilocksChip<F> {
-    pub fn configure(main_gate_config: &MainGateConfig) -> GoldilocksChipConfig<F> {
+    pub fn configure(
+        main_gate_config: &MainGateConfig,
+        range_config: &RangeConfig,
+    ) -> GoldilocksChipConfig<F> {
         GoldilocksChipConfig {
             main_gate_config: main_gate_config.clone(),
+            range_config: range_config.clone(),
             _marker: PhantomData,
         }
     }
@@ -39,6 +44,44 @@ impl<F: FieldExt> GoldilocksChip<F> {
 
     fn main_gate(&self) -> MainGate<F> {
         MainGate::new(self.goldilocks_chip_config.main_gate_config.clone())
+    }
+
+    fn range_chip(&self) -> RangeChip<F> {
+        RangeChip::new(self.goldilocks_chip_config.range_config.clone())
+    }
+
+    fn quotient_range_check(
+        &self,
+        ctx: &mut RegionCtx<'_, F>,
+        quotient: &AssignedValue<F>,
+    ) -> Result<(), Error> {
+        quotient.value().map(|&x| {
+            assert!(
+                fe_to_big(x).bits() <= 80,
+                "quotient range check: sanity check failed"
+            )
+        });
+        let range_chip = self.range_chip();
+        let (q, _limbs) = range_chip.decompose(ctx, quotient.value().cloned(), 16, 80)?;
+        ctx.constrain_equal(q.cell(), quotient.cell())?;
+        Ok(())
+    }
+
+    fn remainder_range_check(
+        &self,
+        ctx: &mut RegionCtx<'_, F>,
+        remainder: &AssignedValue<F>,
+    ) -> Result<(), Error> {
+        remainder.value().map(|&x| {
+            assert!(
+                fe_to_big(x).bits() <= 64,
+                "remainder range check: sanity check failed"
+            )
+        });
+        let range_chip = self.range_chip();
+        let (q, _limbs) = range_chip.decompose(ctx, remainder.value().cloned(), 16, 64)?;
+        ctx.constrain_equal(q.cell(), remainder.cell())?;
+        Ok(())
     }
 
     pub fn goldilocks_modulus(&self) -> BigUint {
@@ -89,19 +132,24 @@ impl<F: FieldExt> GoldilocksChip<F> {
                 (big_to_fe(q), big_to_fe(r))
             })
             .unzip();
-        Ok(main_gate
-            .apply(
-                ctx,
-                [
-                    Term::assigned_to_add(lhs),
-                    Term::assigned_to_add(rhs),
-                    Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus)),
-                    Term::unassigned_to_sub(remainder),
-                ],
-                F::zero(),
-                CombinationOptionCommon::OneLinerAdd.into(),
-            )?
-            .swap_remove(3))
+        let assigned = main_gate.apply(
+            ctx,
+            [
+                Term::assigned_to_add(lhs),
+                Term::assigned_to_add(rhs),
+                Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus)),
+                Term::unassigned_to_sub(remainder),
+            ],
+            F::zero(),
+            CombinationOptionCommon::OneLinerAdd.into(),
+        )?;
+        let q_assigned = assigned[2].clone();
+        let r_assigned = assigned[3].clone();
+
+        // range check
+        self.quotient_range_check(ctx, &q_assigned)?;
+        self.remainder_range_check(ctx, &r_assigned)?;
+        Ok(r_assigned)
     }
 
     pub fn sub(
@@ -121,23 +169,25 @@ impl<F: FieldExt> GoldilocksChip<F> {
                 (big_to_fe(q), big_to_fe(r))
             })
             .unzip();
-        Ok(main_gate
-            .apply(
-                ctx,
-                [
-                    Term::assigned_to_add(lhs),
-                    Term::unassigned_to_add(Value::known(big_to_fe(goldilocks_modulus.clone()))),
-                    Term::assigned_to_sub(rhs),
-                    Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus.clone())),
-                    Term::unassigned_to_sub(remainder),
-                ],
-                F::zero(),
-                CombinationOptionCommon::OneLinerAdd.into(),
-            )?
-            .swap_remove(4))
+        let assigned = main_gate.apply(
+            ctx,
+            [
+                Term::assigned_to_add(lhs),
+                Term::assigned_to_sub(rhs),
+                Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus.clone())),
+                Term::unassigned_to_sub(remainder),
+            ],
+            big_to_fe::<F>(goldilocks_modulus.clone()),
+            CombinationOptionCommon::OneLinerAdd.into(),
+        )?;
+        let q_assigned = assigned[2].clone();
+        let r_assigned = assigned[3].clone();
+        // range check
+        self.quotient_range_check(ctx, &q_assigned)?;
+        self.remainder_range_check(ctx, &r_assigned)?;
+        Ok(r_assigned)
     }
 
-    // TODO : range check
     pub fn mul(
         &self,
         ctx: &mut RegionCtx<'_, F>,
@@ -168,19 +218,23 @@ impl<F: FieldExt> GoldilocksChip<F> {
                 (big_to_fe(q), big_to_fe(r))
             })
             .unzip();
-        Ok(main_gate
-            .apply(
-                ctx,
-                [
-                    Term::assigned_to_mul(lhs),
-                    Term::assigned_to_mul(rhs),
-                    Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus)),
-                    Term::unassigned_to_sub(remainder),
-                ],
-                F::zero(),
-                CombinationOptionCommon::CombineToNextScaleMul(F::zero(), constant).into(),
-            )?
-            .swap_remove(3))
+        let assigned = main_gate.apply(
+            ctx,
+            [
+                Term::assigned_to_mul(lhs),
+                Term::assigned_to_mul(rhs),
+                Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus)),
+                Term::unassigned_to_sub(remainder),
+            ],
+            F::zero(),
+            CombinationOptionCommon::CombineToNextScaleMul(F::zero(), constant).into(),
+        )?;
+        let q_assigned = assigned[2].clone();
+        let r_assigned = assigned[3].clone();
+        // range check
+        self.quotient_range_check(ctx, &q_assigned)?;
+        self.remainder_range_check(ctx, &r_assigned)?;
+        Ok(r_assigned)
     }
 
     pub fn mul_add_constant(
@@ -202,20 +256,23 @@ impl<F: FieldExt> GoldilocksChip<F> {
                 (big_to_fe(q), big_to_fe(r))
             })
             .unzip();
-        Ok(main_gate
-            .apply(
-                ctx,
-                [
-                    Term::assigned_to_mul(a),
-                    Term::assigned_to_mul(b),
-                    Term::unassigned_to_add(Value::known(to_add)),
-                    Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus)),
-                    Term::unassigned_to_sub(remainder),
-                ],
-                F::zero(),
-                CombinationOptionCommon::OneLinerMul.into(),
-            )?
-            .swap_remove(4))
+        let assigned = main_gate.apply(
+            ctx,
+            [
+                Term::assigned_to_mul(a),
+                Term::assigned_to_mul(b),
+                Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus)),
+                Term::unassigned_to_sub(remainder),
+            ],
+            to_add,
+            CombinationOptionCommon::OneLinerMul.into(),
+        )?;
+        let q_assigned = assigned[2].clone();
+        let r_assigned = assigned[3].clone();
+        // range check
+        self.quotient_range_check(ctx, &q_assigned)?;
+        self.remainder_range_check(ctx, &r_assigned)?;
+        Ok(r_assigned)
     }
 
     pub fn add_constant(
@@ -234,19 +291,22 @@ impl<F: FieldExt> GoldilocksChip<F> {
                 (big_to_fe(q), big_to_fe(r))
             })
             .unzip();
-        Ok(main_gate
-            .apply(
-                ctx,
-                [
-                    Term::assigned_to_add(a),
-                    Term::unassigned_to_add(Value::known(self.goldilocks_to_native_fe(constant))),
-                    Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus)),
-                    Term::unassigned_to_sub(remainder),
-                ],
-                F::zero(),
-                CombinationOptionCommon::OneLinerAdd.into(),
-            )?
-            .swap_remove(3))
+        let assigned = main_gate.apply(
+            ctx,
+            [
+                Term::assigned_to_add(a),
+                Term::Unassigned(quotient, -big_to_fe::<F>(goldilocks_modulus)),
+                Term::unassigned_to_sub(remainder),
+            ],
+            self.goldilocks_to_native_fe(constant),
+            CombinationOptionCommon::OneLinerAdd.into(),
+        )?;
+        let q_assigned = assigned[1].clone();
+        let r_assigned = assigned[2].clone();
+        // range check
+        self.quotient_range_check(ctx, &q_assigned)?;
+        self.remainder_range_check(ctx, &r_assigned)?;
+        Ok(r_assigned)
     }
 
     pub fn assert_equal(
@@ -395,7 +455,6 @@ impl<F: FieldExt> GoldilocksChip<F> {
         Ok((a_inv, r))
     }
 
-    // TODO : is it okay?
     pub fn select(
         &self,
         ctx: &mut RegionCtx<'_, F>,
@@ -509,5 +568,98 @@ impl<F: FieldExt> GoldilocksChip<F> {
     ) -> Result<AssignedCondition<F>, Error> {
         let a_mimus_b = self.sub(ctx, a, b)?;
         self.is_zero(ctx, &a_mimus_b)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::marker::PhantomData;
+
+    use halo2_proofs::{
+        circuit::{floor_planner::V1, Layouter},
+        dev::MockProver,
+        halo2curves::bn256::Fr,
+        plonk::{Circuit, ConstraintSystem, Error},
+    };
+    use halo2curves::goldilocks::fp::Goldilocks;
+    use halo2wrong::RegionCtx;
+    use halo2wrong_maingate::{MainGate, RangeChip, RangeInstructions};
+
+    use super::{GoldilocksChip, GoldilocksChipConfig};
+
+    #[derive(Clone, Default)]
+    pub struct TestCircuit;
+
+    impl Circuit<Fr> for TestCircuit {
+        type Config = GoldilocksChipConfig<Fr>;
+
+        type FloorPlanner = V1;
+
+        fn without_witnesses(&self) -> Self {
+            Self::default()
+        }
+
+        fn configure(meta: &mut ConstraintSystem<Fr>) -> Self::Config {
+            let main_gate_config = MainGate::configure(meta);
+            let range_config = RangeChip::configure(meta, &main_gate_config, vec![16], vec![0]);
+            GoldilocksChipConfig {
+                main_gate_config,
+                range_config,
+                _marker: PhantomData,
+            }
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<Fr>,
+        ) -> Result<(), Error> {
+            let chip = GoldilocksChip::new(&config);
+
+            layouter.assign_region(
+                || "mod contract",
+                |region| {
+                    let ctx = &mut RegionCtx::new(region, 0);
+
+                    let a = chip.assign_constant(ctx, Goldilocks::from(2))?;
+                    let b = chip.assign_constant(ctx, Goldilocks::from(3))?;
+                    let _c = chip.add(ctx, &a, &b)?;
+
+                    Ok(())
+                },
+            )?;
+            let range_chip = RangeChip::new(config.range_config);
+            range_chip.load_table(&mut layouter)?;
+            Ok(())
+        }
+    }
+
+    const DEGREE: u32 = 17;
+
+    #[test]
+    fn test_fixed_goldilocks_chip() {
+        let circuit = TestCircuit;
+        let instance = Vec::<Fr>::new();
+        let mock_prover = MockProver::run(DEGREE, &circuit, vec![instance.clone()]).unwrap();
+        mock_prover.assert_satisfied();
+
+        // // generates EVM verifier
+        // let srs: ParamsKZG<Bn256> = EvmVerifier::gen_srs(DEGREE);
+        // let pk = EvmVerifier::gen_pk(&srs, &circuit);
+        // let deployment_code =
+        //     EvmVerifier::gen_evm_verifier(&srs, pk.get_vk(), vec![instance.len()]);
+
+        // // generates SNARK proof and runs EVM verifier
+        // println!("{}", "Starting finalization phase");
+        // let proof = EvmVerifier::gen_proof(&srs, &pk, circuit.clone(), vec![instance.clone()]);
+        // println!("{}", "SNARK proof generated successfully!");
+
+        // let calldata = encode_calldata::<Fr>(&[instance], &proof);
+        // let deployment_code_hex = "0x".to_string() + &hex::encode(deployment_code);
+        // let calldata_hex = "0x".to_string() + &hex::encode(calldata);
+        // let mut file = File::create("deployment_code.txt").unwrap();
+        // file.write_all(deployment_code_hex.as_bytes()).unwrap();
+        // let mut file = File::create("calldata.txt").unwrap();
+        // file.write_all(calldata_hex.as_bytes()).unwrap();
     }
 }

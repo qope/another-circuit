@@ -79,7 +79,7 @@ impl Circuit<Fr> for TestCircuit {
     }
 }
 
-const DEGREE: u32 = 20;
+const DEGREE: u32 = 17;
 
 #[test]
 fn test_goldilocks_contract() {

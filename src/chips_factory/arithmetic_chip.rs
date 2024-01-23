@@ -1,20 +1,30 @@
 use std::collections::HashMap;
 
 use halo2_proofs::{
-    circuit::{AssignedCell, Value},
-    plonk::{Advice, Column, ConstraintSystem, Error, Expression, Fixed, Selector},
+    circuit::{AssignedCell, Layouter, Value},
+    plonk::{Advice, Column, ConstraintSystem, Error, Expression, Fixed, Instance, Selector},
     poly::Rotation,
 };
 use halo2curves::FieldExt;
 use halo2wrong::RegionCtx;
-use halo2wrong_maingate::{big_to_fe, fe_to_big};
+use halo2wrong_maingate::{big_to_fe, fe_to_big, AssignedValue};
 use num_bigint::BigUint;
 use num_integer::Integer;
 
 use super::range_chip::{RangeChip, RangeChipConfig};
 
-const NUM_VARS: usize = 4;
+const NUM_VARS: usize = 2;
 pub const GOLDILOCKS_MODULUS: u64 = ((1 << 32) - 1) * (1 << 32) + 1;
+
+#[derive(Clone)]
+pub enum Term<F: FieldExt> {
+    /// Assigned value
+    Assigned(AssignedValue<F>),
+    /// Unassigned witness
+    Unassigned(Value<F>),
+    /// Unassigned fixed value
+    UnassignedFixed(F),
+}
 
 /// consraints \sum_i a_i * b_i = c
 #[derive(Clone, Debug)]
@@ -22,6 +32,7 @@ pub struct ArithmeticChipConfig<F: FieldExt> {
     pub a: [Column<Advice>; NUM_VARS],
     pub b: [Column<Advice>; NUM_VARS],
     pub c: Column<Advice>,
+    pub instance: Column<Instance>,
     pub constant: Column<Fixed>,
     pub selector: Selector,
     pub range_chip_config: RangeChipConfig<F>,
@@ -34,11 +45,13 @@ impl<F: FieldExt> ArithmeticChipConfig<F> {
         let c = meta.advice_column();
         let constant = meta.fixed_column();
         let selector = meta.selector();
+        let instance = meta.instance_column();
 
         a.iter().for_each(|x| meta.enable_equality(*x));
         b.iter().for_each(|x| meta.enable_equality(*x));
         meta.enable_equality(c);
         meta.enable_equality(constant);
+        meta.enable_equality(instance);
 
         meta.create_gate("arithmetic gate", |meta| {
             let s = meta.query_selector(selector);
@@ -61,6 +74,7 @@ impl<F: FieldExt> ArithmeticChipConfig<F> {
             a,
             b,
             c,
+            instance,
             constant,
             selector,
             range_chip_config,
@@ -100,6 +114,12 @@ impl<F: FieldExt> ArithmeticChip<F> {
             config: config.clone(),
             assigned_constants: assigned_constants.clone(),
         }
+    }
+
+    pub fn load_table(&self, layouter: &mut impl Layouter<F>) -> Result<(), Error> {
+        let range_chip = RangeChip::new(&self.config.range_chip_config);
+        range_chip.load_table(layouter)?;
+        Ok(())
     }
 
     pub fn assign_constant(
@@ -221,8 +241,13 @@ impl<F: FieldExt> ArithmeticChip<F> {
         let modulus = Value::known(F::from(GOLDILOCKS_MODULUS));
         let zero = Value::known(F::zero());
         let one = Value::known(F::one());
+
+        let mut a = vec![m, r];
+        a.resize(NUM_VARS, zero);
+        let mut b = vec![modulus, one];
+        b.resize(NUM_VARS, zero);
         let mul_add_assigned =
-            self.assign_no_next(ctx, [m, r, zero, zero], [modulus, one, zero, zero])?; // c = m * modulus + r
+            self.assign_no_next(ctx, a.try_into().unwrap(), b.try_into().unwrap())?; // c = m * modulus + r
         ctx.constrain_equal(m_assigned.cell(), mul_add_assigned.a[0].cell())?;
         let r_assigned = mul_add_assigned.a[1].clone();
         self.assert_constant(ctx, &mul_add_assigned.a[2], 0)?;
@@ -285,5 +310,93 @@ impl<F: FieldExt> ArithmeticChip<F> {
         ctx.next();
         self.assert_constant(ctx, &assigned_limbs[4], 0)?;
         Ok(assigned)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashMap, fs::File, io::Write};
+
+    use halo2_proofs::{
+        circuit::{floor_planner::V1, Layouter},
+        dev::MockProver,
+        halo2curves::bn256::{Bn256, Fr},
+        plonk::{Circuit, ConstraintSystem, Error},
+        poly::kzg::commitment::ParamsKZG,
+    };
+    use halo2wrong::RegionCtx;
+    use snark_verifier::loader::evm::encode_calldata;
+
+    use crate::snark::verifier_api::EvmVerifier;
+
+    use super::{ArithmeticChip, ArithmeticChipConfig};
+
+    #[derive(Clone, Default)]
+    pub struct TestCircuit;
+
+    impl Circuit<Fr> for TestCircuit {
+        type Config = ArithmeticChipConfig<Fr>;
+        type FloorPlanner = V1;
+
+        fn without_witnesses(&self) -> Self {
+            Self::default()
+        }
+
+        fn configure(meta: &mut ConstraintSystem<Fr>) -> Self::Config {
+            ArithmeticChipConfig::<Fr>::configure(meta)
+        }
+
+        fn synthesize(
+            &self,
+            config: Self::Config,
+            mut layouter: impl Layouter<Fr>,
+        ) -> Result<(), Error> {
+            let chip = ArithmeticChip::new(&config, &HashMap::new());
+
+            layouter.assign_region(
+                || "Verify proof",
+                |region| {
+                    let ctx = &mut RegionCtx::new(region, 0);
+                    // let x = chip.assign_value(ctx, Value::known(Fr::from(2)))?;
+                    // let y = chip.assign_value(ctx, Value::known(Fr::from(2)))?;
+
+                    // let _z = chip.generic_mul(ctx, 1, 0, x, y)?;
+
+                    Ok(())
+                },
+            )?;
+            chip.load_table(&mut layouter)?;
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn test_new_arithmetic_contract() {
+        const DEGREE: u32 = 17;
+
+        let circuit = TestCircuit;
+        let instance = vec![];
+        let mock_prover = MockProver::run(DEGREE, &circuit, vec![instance.clone()]).unwrap();
+        mock_prover.assert_satisfied();
+        println!("{}", "Mock prover passes");
+
+        // // generates EVM verifier
+        let srs: ParamsKZG<Bn256> = EvmVerifier::gen_srs(DEGREE);
+        let pk = EvmVerifier::gen_pk(&srs, &circuit);
+        let deployment_code =
+            EvmVerifier::gen_evm_verifier(&srs, pk.get_vk(), vec![instance.len()]);
+
+        // generates SNARK proof and runs EVM verifier
+        println!("{}", "Starting finalization phase");
+        let proof = EvmVerifier::gen_proof(&srs, &pk, circuit.clone(), vec![instance.clone()]);
+        println!("{}", "SNARK proof generated successfully!");
+
+        let calldata = encode_calldata::<Fr>(&[instance], &proof);
+        let deployment_code_hex = "0x".to_string() + &hex::encode(deployment_code);
+        let calldata_hex = "0x".to_string() + &hex::encode(calldata);
+        let mut file = File::create("deployment_code.txt").unwrap();
+        file.write_all(deployment_code_hex.as_bytes()).unwrap();
+        let mut file = File::create("calldata.txt").unwrap();
+        file.write_all(calldata_hex.as_bytes()).unwrap();
     }
 }
